@@ -9,7 +9,7 @@ import ToolSettingsPanel from './components/ToolSettingsPanel.vue'
 import TextInput from './components/TextInput.vue'
 import CharacterPalette from './components/CharacterPalette.vue'
 import ToastNotification from './components/ToastNotification.vue'
-import { useToolStore, RECTANGLE_BORDER_STYLES, LINE_STYLES, LINE_END_STYLES } from './stores/tools'
+import { useToolStore, RECTANGLE_BORDER_STYLES, LINE_STYLES, LINE_END_STYLES, type RectangleBorderStyle, type LineStyle, type LineEndStyle } from './stores/tools'
 import { useHistoryStore } from './stores/history'
 import { useColorStore } from './stores/colors'
 import { useLayersStore } from './stores/layers'
@@ -481,6 +481,8 @@ const handlePaste = (e: ClipboardEvent) => {
 let screenToWorld: (screenX: number, screenY: number) => { x: number; y: number }
 // Convert world to screen coordinates (will be defined in onMounted)
 let worldToScreen: (worldX: number, worldY: number) => { x: number; y: number }
+// Draw text function (will be defined in onMounted)
+let drawText: (startWorldX: number, startWorldY: number, endWorldX: number, endWorldY: number, text: string, hAlign?: string, vAlign?: string, showBorder?: boolean) => Map<string, string>
 
 // Handle text confirmation from TextInput component
 const handleTextConfirm = (text: string, screenX: number, screenY: number) => {
@@ -690,7 +692,7 @@ onMounted(() => {
   }
 
   // Draw text within bounds with word wrapping and alignment
-  const drawText = (startWorldX: number, startWorldY: number, endWorldX: number, endWorldY: number, text: string, hAlign: string = 'left', vAlign: string = 'top', showBorder: boolean = true): Map<string, string> => {
+  drawText = (startWorldX: number, startWorldY: number, endWorldX: number, endWorldY: number, text: string, hAlign: string = 'left', vAlign: string = 'top', showBorder: boolean = true): Map<string, string> => {
     const startGrid = worldToGrid(startWorldX, startWorldY)
     const endGrid = worldToGrid(endWorldX, endWorldY)
     
@@ -1147,8 +1149,12 @@ onMounted(() => {
     const startGridY = Math.floor(topLeft.y / gridHeight)
     const endGridY = Math.ceil(bottomRight.y / gridHeight)
 
+    // Get computed style for dark mode support
+    const computedStyle = getComputedStyle(document.documentElement)
+    const selectionColor = computedStyle.getPropertyValue('--selection-highlight').trim()
+    
     // Set up selection highlight style
-    ctx.strokeStyle = '#007acc' // Selection highlight color from CSS variables
+    ctx.strokeStyle = selectionColor || '#007acc'
     ctx.lineWidth = 2 / camera.zoom
     ctx.globalAlpha = 0.8
 
@@ -1547,7 +1553,7 @@ onMounted(() => {
         
         // Check if we're clicking on an already selected shape to start dragging
         const newSelectedShape = layersStore.getSelectedShape()
-        if (selectedShape && selectedShape.id === shape.id) {
+        if (selectedShape && selectedShape.id === shape.id && newSelectedShape) {
           // Start dragging the selected shape
           shapeDragState.isDragging = true
           shapeDragState.shapeId = shape.id
@@ -1736,7 +1742,7 @@ onMounted(() => {
           const oldFillChar = toolStore.rectangleFillChar
           const oldShadow = toolStore.rectangleShadow
           
-          toolStore.rectangleBorderStyle = borderStyle
+          toolStore.rectangleBorderStyle = borderStyle as RectangleBorderStyle
           toolStore.rectangleFillChar = fillChar
           toolStore.rectangleShadow = shadow
           
@@ -1784,9 +1790,9 @@ onMounted(() => {
           const oldLineStartStyle = toolStore.lineStartStyle
           const oldLineEndStyle = toolStore.lineEndStyle
           
-          toolStore.lineStyle = lineStyle
-          toolStore.lineStartStyle = lineStartStyle
-          toolStore.lineEndStyle = lineEndStyle
+          toolStore.lineStyle = lineStyle as LineStyle
+          toolStore.lineStartStyle = lineStartStyle as LineEndStyle
+          toolStore.lineEndStyle = lineEndStyle as LineEndStyle
           
           const lineData = drawLine(
             gridToWorld(startX, startY).x,
@@ -2032,8 +2038,10 @@ onMounted(() => {
 
   // Render function
   render = () => {
-    // Clear canvas
-    ctx.fillStyle = '#fafafb' // Use CSS variable value
+    // Clear canvas - get computed style for dark mode support
+    const computedStyle = getComputedStyle(document.documentElement)
+    const canvasBg = computedStyle.getPropertyValue('--canvas-bg').trim()
+    ctx.fillStyle = canvasBg || '#fafafb'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     
     // Save context state
@@ -2076,7 +2084,11 @@ onMounted(() => {
     // Size grid to match monospace character dimensions (1:2 ratio)
     const lineWidth = 1 / camera.zoom // Keep line width constant in screen space
     
-    ctx.strokeStyle = '#c4c3d0' // Grid line color from CSS variables
+    // Get computed style for dark mode support
+    const computedStyle = getComputedStyle(document.documentElement)
+    const gridColor = computedStyle.getPropertyValue('--grid-line').trim()
+    
+    ctx.strokeStyle = gridColor || '#c4c3d0'
     ctx.lineWidth = lineWidth
     
     // Calculate visible bounds in world space
@@ -2107,11 +2119,15 @@ onMounted(() => {
   const drawCenter = (ctx: CanvasRenderingContext2D) => {
     const size = 10 / camera.zoom // Keep size constant in screen space
     
+    // Get computed style for dark mode support
+    const computedStyle = getComputedStyle(document.documentElement)
+    const centerColor = computedStyle.getPropertyValue('--center-marker').trim()
+    
     // Set transparency for the origin indicator
     ctx.globalAlpha = 0.3
     
     // Draw center cross
-    ctx.strokeStyle = '#ff4444' // Center marker color from CSS variables
+    ctx.strokeStyle = centerColor || '#ff4444'
     ctx.lineWidth = 2 / camera.zoom
     ctx.beginPath()
     ctx.moveTo(-size, 0)
@@ -2121,7 +2137,7 @@ onMounted(() => {
     ctx.stroke()
     
     // Draw center circle
-    ctx.strokeStyle = '#ff4444' // Center marker color from CSS variables
+    ctx.strokeStyle = centerColor || '#ff4444'
     ctx.beginPath()
     ctx.arc(0, 0, size, 0, Math.PI * 2)
     ctx.stroke()
@@ -2160,6 +2176,9 @@ onMounted(() => {
   
   // Watch for layer changes and re-render
   watch(() => layersStore.layers, render, { deep: true })
+  
+  // Watch for dark mode changes and re-render
+  watch(() => appStore.darkMode, render)
 
   // Keyboard shortcuts
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -2299,6 +2318,50 @@ onMounted(() => {
   --color-swatch-border-hover: #007acc;
   --delete-hover-bg: #ffe6e6;
   --delete-hover-text: #d32f2f;
+}
+
+/* Dark Mode */
+[data-theme="dark"] {
+  /* UI Colors */
+  --bg-primary: rgba(30, 30, 30, 0.95);
+  --bg-secondary: rgba(40, 40, 40, 0.8);
+  --bg-hover: #3a3a3a;
+  --bg-active: #0e7ecf;
+  --bg-active-hover: #0969b5;
+  
+  /* Border & Outline Colors */
+  --border-light: #444;
+  --border-active: #0e7ecf;
+  
+  /* Text Colors */
+  --text-primary: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --text-muted: #808080;
+  --text-white: white;
+  
+  /* Canvas & Grid Colors */
+  --canvas-bg: #1a1a1a;
+  --grid-line: #333;
+  --center-marker: #ff6666;
+  --selection-highlight: #0e7ecf;
+  
+  /* Shadow & Effects */
+  --shadow-light: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.6);
+  
+  /* Layer Panel Colors */
+  --layer-bg-selected: rgba(14, 126, 207, 0.2);
+  --layer-bg-selected-hover: rgba(14, 126, 207, 0.3);
+  --shape-bg: rgba(60, 60, 60, 0.5);
+  --shape-bg-hover: rgba(70, 70, 70, 0.8);
+  --shape-bg-selected: rgba(14, 126, 207, 0.2);
+  --shape-bg-selected-hover: rgba(14, 126, 207, 0.3);
+  
+  /* Color Selector */
+  --color-swatch-border: #555;
+  --color-swatch-border-hover: #0e7ecf;
+  --delete-hover-bg: #4a2020;
+  --delete-hover-text: #ff6666;
 }
 
 /* Global font application */

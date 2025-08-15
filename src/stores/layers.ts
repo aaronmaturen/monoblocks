@@ -19,6 +19,11 @@ export interface Shape {
     lineEndStyle?: string
     // Brush-specific settings
     character?: string
+    // Text-specific settings
+    content?: string
+    horizontalAlign?: string
+    verticalAlign?: string
+    showBorder?: boolean
   }
 }
 

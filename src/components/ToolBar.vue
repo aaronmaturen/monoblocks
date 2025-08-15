@@ -2,10 +2,12 @@
 import { useToolStore, type Tool } from '../stores/tools'
 import { useHistoryStore } from '../stores/history'
 import { useColorStore } from '../stores/colors'
+import { useAppStore } from '../stores/app'
 
 const toolStore = useToolStore()
 const historyStore = useHistoryStore()
 const colorStore = useColorStore()
+const appStore = useAppStore()
 
 const tools: Array<{ id: Tool; label: string }> = [
   { id: 'pan', label: 'Pan' },
@@ -155,6 +157,14 @@ const selectTool = (toolId: Tool) => {
         <i class="fa-thumbprint fa-light fa-arrow-down-to-line"></i>
       </button>
       
+      <!-- Separator -->
+      <div class="separator"></div>
+      
+      <!-- Dark Mode Toggle -->
+      <button class="tool-button" @click="appStore.toggleDarkMode()" :title="appStore.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+        <i class="fa-thumbprint fa-light fa-circle-half-stroke"></i>
+      </button>
+      
       <!-- About Button -->
       <button class="tool-button" @click="emit('about')" title="About MonoBlocks Professional">
         <i class="fa-thumbprint fa-light fa-question"></i>
@@ -263,6 +273,9 @@ const selectTool = (toolId: Tool) => {
 }
 .tool-button:has(.fa-arrow-down-to-line) i {
   color: #14b8a6; /* Teal */
+}
+.tool-button:has(.fa-circle-half-stroke) i {
+  color: #f59e0b; /* Amber */
 }
 .tool-button:has(.fa-question) i {
   color: #6366f1; /* Indigo */

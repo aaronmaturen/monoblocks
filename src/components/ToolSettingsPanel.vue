@@ -92,6 +92,12 @@ const openColorPaletteForShape = () => {
     }
   }
 }
+
+const regenerateShape = (shapeId: string) => {
+  if ((window as any).regenerateShape) {
+    (window as any).regenerateShape(shapeId)
+  }
+}
 </script>
 
 <template>
@@ -117,7 +123,7 @@ const openColorPaletteForShape = () => {
             <input 
               type="text" 
               :value="selectedShape.name" 
-              @input="(e) => layersStore.updateShapeName(selectedShape.id, (e.target as HTMLInputElement).value)"
+              @input="(e) => selectedShape && layersStore.updateShapeName(selectedShape.id, (e.target as HTMLInputElement).value)"
               class="text-input" 
             />
           </div>
@@ -129,7 +135,7 @@ const openColorPaletteForShape = () => {
                 type="text" 
                 class="fill-input" 
                 :value="selectedShape.toolSettings?.character || '█'"
-                @input="(e) => layersStore.updateShapeSettings(selectedShape.id, { character: (e.target as HTMLInputElement).value })"
+                @input="(e) => selectedShape && layersStore.updateShapeSettings(selectedShape.id, { character: (e.target as HTMLInputElement).value })"
                 placeholder="Drawing character"
                 maxlength="1"
               />
@@ -175,7 +181,7 @@ const openColorPaletteForShape = () => {
             <input 
               type="text" 
               :value="selectedShape.name" 
-              @input="(e) => layersStore.updateShapeName(selectedShape.id, (e.target as HTMLInputElement).value)"
+              @input="(e) => selectedShape && layersStore.updateShapeName(selectedShape.id, (e.target as HTMLInputElement).value)"
               class="text-input" 
             />
           </div>
@@ -185,7 +191,7 @@ const openColorPaletteForShape = () => {
             <select 
               class="select-input" 
               :value="selectedShape ? (selectedShape.toolSettings?.borderStyle || 'single') : (toolStore.rectangleBorderStyle || 'single')"
-              @change="(e) => selectedShape ? layersStore.updateShapeSettings(selectedShape.id, { borderStyle: (e.target as HTMLSelectElement).value }) : toolStore.setRectangleBorderStyle && toolStore.setRectangleBorderStyle((e.target as HTMLSelectElement).value)"
+              @change="(e) => selectedShape ? layersStore.updateShapeSettings(selectedShape.id, { borderStyle: (e.target as HTMLSelectElement).value }) : toolStore.setRectangleBorderStyle && toolStore.setRectangleBorderStyle((e.target as HTMLSelectElement).value as any)"
             >
               <option value="single">Single Line</option>
               <option value="double">Double Line</option>
@@ -297,7 +303,7 @@ const openColorPaletteForShape = () => {
             <input 
               type="text" 
               :value="selectedShape.name" 
-              @input="(e) => layersStore.updateShapeName(selectedShape.id, (e.target as HTMLInputElement).value)"
+              @input="(e) => selectedShape && layersStore.updateShapeName(selectedShape.id, (e.target as HTMLInputElement).value)"
               class="text-input" 
             />
           </div>
@@ -306,7 +312,7 @@ const openColorPaletteForShape = () => {
             <select 
               class="select-input" 
               :value="selectedShape ? (selectedShape.toolSettings?.lineStyle || 'single') : (toolStore.lineStyle || 'single')"
-              @change="(e) => selectedShape ? layersStore.updateShapeSettings(selectedShape.id, { lineStyle: (e.target as HTMLSelectElement).value }) : toolStore.setLineStyle && toolStore.setLineStyle((e.target as HTMLSelectElement).value)"
+              @change="(e) => selectedShape ? layersStore.updateShapeSettings(selectedShape.id, { lineStyle: (e.target as HTMLSelectElement).value }) : toolStore.setLineStyle && toolStore.setLineStyle((e.target as HTMLSelectElement).value as any)"
             >
               <option value="single">Single Line</option>
               <option value="double">Double Line</option>
@@ -321,7 +327,7 @@ const openColorPaletteForShape = () => {
             <select 
               class="select-input" 
               :value="selectedShape ? (selectedShape.toolSettings?.lineStartStyle || 'none') : (toolStore.lineStartStyle || 'none')"
-              @change="(e) => selectedShape ? layersStore.updateShapeSettings(selectedShape.id, { lineStartStyle: (e.target as HTMLSelectElement).value }) : toolStore.setLineStartStyle && toolStore.setLineStartStyle((e.target as HTMLSelectElement).value)"
+              @change="(e) => selectedShape ? layersStore.updateShapeSettings(selectedShape.id, { lineStartStyle: (e.target as HTMLSelectElement).value }) : toolStore.setLineStartStyle && toolStore.setLineStartStyle((e.target as HTMLSelectElement).value as any)"
             >
               <option value="none">None</option>
               <option value="arrow">Arrow</option>
@@ -334,7 +340,7 @@ const openColorPaletteForShape = () => {
             <select 
               class="select-input" 
               :value="selectedShape ? (selectedShape.toolSettings?.lineEndStyle || 'arrow') : (toolStore.lineEndStyle || 'arrow')"
-              @change="(e) => selectedShape ? layersStore.updateShapeSettings(selectedShape.id, { lineEndStyle: (e.target as HTMLSelectElement).value }) : toolStore.setLineEndStyle && toolStore.setLineEndStyle((e.target as HTMLSelectElement).value)"
+              @change="(e) => selectedShape ? layersStore.updateShapeSettings(selectedShape.id, { lineEndStyle: (e.target as HTMLSelectElement).value }) : toolStore.setLineEndStyle && toolStore.setLineEndStyle((e.target as HTMLSelectElement).value as any)"
             >
               <option value="none">None</option>
               <option value="arrow">Arrow</option>
@@ -371,7 +377,7 @@ const openColorPaletteForShape = () => {
             <input 
               type="text" 
               :value="selectedShape.name" 
-              @input="(e) => layersStore.updateShapeName(selectedShape.id, (e.target as HTMLInputElement).value)"
+              @input="(e) => selectedShape && layersStore.updateShapeName(selectedShape.id, (e.target as HTMLInputElement).value)"
               class="text-input" 
             />
           </div>
@@ -382,8 +388,8 @@ const openColorPaletteForShape = () => {
             <textarea 
               :value="selectedShape.toolSettings?.content || ''"
               @input="(e) => {
-                layersStore.updateShapeSettings(selectedShape.id, { ...selectedShape.toolSettings, content: (e.target as HTMLTextAreaElement).value })
-                if (window.regenerateShape) window.regenerateShape(selectedShape.id)
+                selectedShape && layersStore.updateShapeSettings(selectedShape.id, { ...selectedShape.toolSettings, content: (e.target as HTMLTextAreaElement).value })
+                if (selectedShape) regenerateShape(selectedShape.id)
               }"
               class="text-area"
               rows="3"
@@ -404,8 +410,8 @@ const openColorPaletteForShape = () => {
               :value="selectedShape ? (selectedShape.toolSettings?.horizontalAlign || 'left') : toolStore.textHorizontalAlign"
               @change="(e) => {
                 if (selectedShape) {
-                  layersStore.updateShapeSettings(selectedShape.id, { ...selectedShape.toolSettings, horizontalAlign: (e.target as HTMLSelectElement).value })
-                  if (window.regenerateShape) window.regenerateShape(selectedShape.id)
+                  selectedShape && layersStore.updateShapeSettings(selectedShape.id, { ...selectedShape.toolSettings, horizontalAlign: (e.target as HTMLSelectElement).value })
+                  if (selectedShape) regenerateShape(selectedShape.id)
                 } else {
                   toolStore.setTextHorizontalAlign && toolStore.setTextHorizontalAlign((e.target as HTMLSelectElement).value as any)
                 }
@@ -424,8 +430,8 @@ const openColorPaletteForShape = () => {
               :value="selectedShape ? (selectedShape.toolSettings?.verticalAlign || 'top') : toolStore.textVerticalAlign"
               @change="(e) => {
                 if (selectedShape) {
-                  layersStore.updateShapeSettings(selectedShape.id, { ...selectedShape.toolSettings, verticalAlign: (e.target as HTMLSelectElement).value })
-                  if (window.regenerateShape) window.regenerateShape(selectedShape.id)
+                  selectedShape && layersStore.updateShapeSettings(selectedShape.id, { ...selectedShape.toolSettings, verticalAlign: (e.target as HTMLSelectElement).value })
+                  if (selectedShape) regenerateShape(selectedShape.id)
                 } else {
                   toolStore.setTextVerticalAlign && toolStore.setTextVerticalAlign((e.target as HTMLSelectElement).value as any)
                 }
@@ -446,8 +452,8 @@ const openColorPaletteForShape = () => {
                 :checked="selectedShape ? (selectedShape.toolSettings?.showBorder ?? true) : toolStore.textShowBorder"
                 @change="(e) => {
                   if (selectedShape) {
-                    layersStore.updateShapeSettings(selectedShape.id, { ...selectedShape.toolSettings, showBorder: (e.target as HTMLInputElement).checked })
-                    if (window.regenerateShape) window.regenerateShape(selectedShape.id)
+                    selectedShape && layersStore.updateShapeSettings(selectedShape.id, { ...selectedShape.toolSettings, showBorder: (e.target as HTMLInputElement).checked })
+                    if (selectedShape) regenerateShape(selectedShape.id)
                   } else {
                     toolStore.setTextShowBorder && toolStore.setTextShowBorder((e.target as HTMLInputElement).checked)
                   }
