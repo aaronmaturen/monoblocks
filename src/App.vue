@@ -1113,24 +1113,40 @@ onMounted(() => {
       )
     }
     
-    if (shape.type === 'rectangle') {
-      // Corner anchors for rectangles
-      drawAnchor(bounds.minX, bounds.minY) // Top-left
-      drawAnchor(bounds.maxX, bounds.minY) // Top-right
-      drawAnchor(bounds.minX, bounds.maxY) // Bottom-left
-      drawAnchor(bounds.maxX, bounds.maxY) // Bottom-right
+    if (shape.type === 'rectangle' || shape.type === 'text') {
+      // Corner anchors for rectangles and text boxes - positioned one grid cell outside
+      drawAnchor(bounds.minX - 1, bounds.minY - 1) // Top-left
+      drawAnchor(bounds.maxX + 1, bounds.minY - 1) // Top-right
+      drawAnchor(bounds.minX - 1, bounds.maxY + 1) // Bottom-left
+      drawAnchor(bounds.maxX + 1, bounds.maxY + 1) // Bottom-right
       
-      // Mid-point anchors for rectangles
+      // Mid-point anchors for rectangles and text boxes - positioned one grid cell outside
       const midX = Math.round((bounds.minX + bounds.maxX) / 2)
       const midY = Math.round((bounds.minY + bounds.maxY) / 2)
-      drawAnchor(bounds.minX, midY) // Left
-      drawAnchor(bounds.maxX, midY) // Right
-      drawAnchor(midX, bounds.minY) // Top
-      drawAnchor(midX, bounds.maxY) // Bottom
+      drawAnchor(bounds.minX - 1, midY) // Left
+      drawAnchor(bounds.maxX + 1, midY) // Right
+      drawAnchor(midX, bounds.minY - 1) // Top
+      drawAnchor(midX, bounds.maxY + 1) // Bottom
     } else if (shape.type === 'line') {
-      // End anchors for lines
-      drawAnchor(bounds.minX, bounds.minY) // Start point
-      drawAnchor(bounds.maxX, bounds.maxY) // End point
+      // End anchors for lines - positioned one grid cell away from endpoints
+      // For lines, we need to determine the direction to place anchors
+      const dx = bounds.maxX - bounds.minX
+      const dy = bounds.maxY - bounds.minY
+      
+      // Place anchors perpendicular to line direction or diagonally for better visibility
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // More horizontal line - place anchors above/below
+        drawAnchor(bounds.minX, bounds.minY - 1) // Start point
+        drawAnchor(bounds.maxX, bounds.maxY - 1) // End point
+      } else if (Math.abs(dy) > Math.abs(dx)) {
+        // More vertical line - place anchors left/right
+        drawAnchor(bounds.minX - 1, bounds.minY) // Start point
+        drawAnchor(bounds.maxX - 1, bounds.maxY) // End point
+      } else {
+        // Diagonal line - place anchors diagonally away
+        drawAnchor(bounds.minX - 1, bounds.minY - 1) // Start point
+        drawAnchor(bounds.maxX + 1, bounds.maxY + 1) // End point
+      }
     }
   }
 
@@ -1182,7 +1198,7 @@ onMounted(() => {
     ctx.globalAlpha = 1 // Reset alpha
     
     // Draw resize anchors if select tool is active
-    if (toolStore.currentTool === 'select' && (selectedShape.type === 'rectangle' || selectedShape.type === 'line')) {
+    if (toolStore.currentTool === 'select' && (selectedShape.type === 'rectangle' || selectedShape.type === 'line' || selectedShape.type === 'text')) {
       drawResizeAnchors(ctx, selectedShape)
     }
   }
@@ -1468,30 +1484,57 @@ onMounted(() => {
   // Mouse event handlers
   // Check if a position is over an anchor
   const getAnchorAtPosition = (gridX: number, gridY: number, shape: any) => {
-    if (!shape || (shape.type !== 'rectangle' && shape.type !== 'line')) return null
+    if (!shape || (shape.type !== 'rectangle' && shape.type !== 'line' && shape.type !== 'text')) return null
     
     const bounds = getShapeBounds(shape)
-    const tolerance = 1 // Grid units tolerance for clicking anchors
+    const tolerance = 0.5 // Grid units tolerance for clicking anchors (reduced since anchors are now outside)
     
-    if (shape.type === 'rectangle') {
+    if (shape.type === 'rectangle' || shape.type === 'text') {
       const midX = Math.round((bounds.minX + bounds.maxX) / 2)
       const midY = Math.round((bounds.minY + bounds.maxY) / 2)
       
-      // Check corners
-      if (Math.abs(gridX - bounds.minX) <= tolerance && Math.abs(gridY - bounds.minY) <= tolerance) return 'topLeft'
-      if (Math.abs(gridX - bounds.maxX) <= tolerance && Math.abs(gridY - bounds.minY) <= tolerance) return 'topRight'
-      if (Math.abs(gridX - bounds.minX) <= tolerance && Math.abs(gridY - bounds.maxY) <= tolerance) return 'bottomLeft'
-      if (Math.abs(gridX - bounds.maxX) <= tolerance && Math.abs(gridY - bounds.maxY) <= tolerance) return 'bottomRight'
+      // Check corners (anchors are now one grid cell outside)
+      if (Math.abs(gridX - (bounds.minX - 1)) <= tolerance && Math.abs(gridY - (bounds.minY - 1)) <= tolerance) return 'topLeft'
+      if (Math.abs(gridX - (bounds.maxX + 1)) <= tolerance && Math.abs(gridY - (bounds.minY - 1)) <= tolerance) return 'topRight'
+      if (Math.abs(gridX - (bounds.minX - 1)) <= tolerance && Math.abs(gridY - (bounds.maxY + 1)) <= tolerance) return 'bottomLeft'
+      if (Math.abs(gridX - (bounds.maxX + 1)) <= tolerance && Math.abs(gridY - (bounds.maxY + 1)) <= tolerance) return 'bottomRight'
       
-      // Check edges
-      if (Math.abs(gridX - bounds.minX) <= tolerance && Math.abs(gridY - midY) <= tolerance) return 'left'
-      if (Math.abs(gridX - bounds.maxX) <= tolerance && Math.abs(gridY - midY) <= tolerance) return 'right'
-      if (Math.abs(gridX - midX) <= tolerance && Math.abs(gridY - bounds.minY) <= tolerance) return 'top'
-      if (Math.abs(gridX - midX) <= tolerance && Math.abs(gridY - bounds.maxY) <= tolerance) return 'bottom'
+      // Check edges (anchors are now one grid cell outside)
+      if (Math.abs(gridX - (bounds.minX - 1)) <= tolerance && Math.abs(gridY - midY) <= tolerance) return 'left'
+      if (Math.abs(gridX - (bounds.maxX + 1)) <= tolerance && Math.abs(gridY - midY) <= tolerance) return 'right'
+      if (Math.abs(gridX - midX) <= tolerance && Math.abs(gridY - (bounds.minY - 1)) <= tolerance) return 'top'
+      if (Math.abs(gridX - midX) <= tolerance && Math.abs(gridY - (bounds.maxY + 1)) <= tolerance) return 'bottom'
     } else if (shape.type === 'line') {
-      // For lines, check start and end points
-      if (Math.abs(gridX - bounds.minX) <= tolerance && Math.abs(gridY - bounds.minY) <= tolerance) return 'start'
-      if (Math.abs(gridX - bounds.maxX) <= tolerance && Math.abs(gridY - bounds.maxY) <= tolerance) return 'end'
+      // For lines, anchors are positioned perpendicular to the line direction
+      const dx = bounds.maxX - bounds.minX
+      const dy = bounds.maxY - bounds.minY
+      const isHorizontal = Math.abs(dx) > Math.abs(dy)
+      const isVertical = Math.abs(dy) > Math.abs(dx)
+      
+      if (isHorizontal) {
+        // Horizontal line - check positions above/below the endpoints
+        if (Math.abs(gridX - bounds.minX) <= tolerance && Math.abs(gridY - (bounds.minY - 1)) <= tolerance) return 'start'
+        if (Math.abs(gridX - bounds.maxX) <= tolerance && Math.abs(gridY - (bounds.maxY - 1)) <= tolerance) return 'end'
+      } else if (isVertical) {
+        // Vertical line - check positions left/right of the endpoints
+        if (Math.abs(gridX - (bounds.minX - 1)) <= tolerance && Math.abs(gridY - bounds.minY) <= tolerance) return 'start'
+        if (Math.abs(gridX - (bounds.maxX - 1)) <= tolerance && Math.abs(gridY - bounds.maxY) <= tolerance) return 'end'
+      } else {
+        // Diagonal line - position anchors perpendicular to line direction
+        const length = Math.sqrt(dx * dx + dy * dy)
+        const perpX = -dy / length
+        const perpY = dx / length
+        
+        // Check start anchor (positioned perpendicular to line)
+        const startAnchorX = bounds.minX + Math.round(perpX)
+        const startAnchorY = bounds.minY + Math.round(perpY)
+        if (Math.abs(gridX - startAnchorX) <= tolerance && Math.abs(gridY - startAnchorY) <= tolerance) return 'start'
+        
+        // Check end anchor (positioned perpendicular to line)
+        const endAnchorX = bounds.maxX + Math.round(perpX)
+        const endAnchorY = bounds.maxY + Math.round(perpY)
+        if (Math.abs(gridX - endAnchorX) <= tolerance && Math.abs(gridY - endAnchorY) <= tolerance) return 'end'
+      }
     }
     
     return null
@@ -1529,7 +1572,7 @@ onMounted(() => {
       const selectedShape = layersStore.getSelectedShape()
       
       // Check if clicking on a resize anchor first
-      if (selectedShape && (selectedShape.type === 'rectangle' || selectedShape.type === 'line')) {
+      if (selectedShape && (selectedShape.type === 'rectangle' || selectedShape.type === 'line' || selectedShape.type === 'text')) {
         const anchor = getAnchorAtPosition(grid.x, grid.y, selectedShape)
         if (anchor) {
           // Start resizing
@@ -1608,7 +1651,7 @@ onMounted(() => {
       const grid = worldToGrid(worldPos.x, worldPos.y)
       const selectedShape = layersStore.getSelectedShape()
       
-      if (selectedShape && (selectedShape.type === 'rectangle' || selectedShape.type === 'line')) {
+      if (selectedShape && (selectedShape.type === 'rectangle' || selectedShape.type === 'line' || selectedShape.type === 'text')) {
         // Check if hovering over an anchor
         const anchor = getAnchorAtPosition(grid.x, grid.y, selectedShape)
         if (anchor) {
@@ -1809,6 +1852,72 @@ onMounted(() => {
           // Update shape data
           selectedShape.data.clear()
           for (const [key, char] of lineData) {
+            selectedShape.data.set(key, char)
+          }
+          
+          render()
+        } else if (selectedShape.type === 'text') {
+          // Calculate new bounds based on which anchor is being dragged
+          let newMinX = originalBounds.minX
+          let newMaxX = originalBounds.maxX
+          let newMinY = originalBounds.minY
+          let newMaxY = originalBounds.maxY
+          
+          switch (shapeResizeState.anchor) {
+            case 'topLeft':
+              newMinX = originalBounds.minX + deltaX
+              newMinY = originalBounds.minY + deltaY
+              break
+            case 'topRight':
+              newMaxX = originalBounds.maxX + deltaX
+              newMinY = originalBounds.minY + deltaY
+              break
+            case 'bottomLeft':
+              newMinX = originalBounds.minX + deltaX
+              newMaxY = originalBounds.maxY + deltaY
+              break
+            case 'bottomRight':
+              newMaxX = originalBounds.maxX + deltaX
+              newMaxY = originalBounds.maxY + deltaY
+              break
+            case 'left':
+              newMinX = originalBounds.minX + deltaX
+              break
+            case 'right':
+              newMaxX = originalBounds.maxX + deltaX
+              break
+            case 'top':
+              newMinY = originalBounds.minY + deltaY
+              break
+            case 'bottom':
+              newMaxY = originalBounds.maxY + deltaY
+              break
+          }
+          
+          // Ensure minimum size
+          if (newMaxX <= newMinX) newMaxX = newMinX + 1
+          if (newMaxY <= newMinY) newMaxY = newMinY + 1
+          
+          // Recreate text box with new bounds, preserving tool settings
+          const content = selectedShape.toolSettings?.content || ''
+          const horizontalAlign = selectedShape.toolSettings?.horizontalAlign || 'left'
+          const verticalAlign = selectedShape.toolSettings?.verticalAlign || 'top'
+          const showBorder = selectedShape.toolSettings?.showBorder ?? true
+          
+          const textData = drawText(
+            gridToWorld(newMinX, newMinY).x,
+            gridToWorld(newMinX, newMinY).y,
+            gridToWorld(newMaxX, newMaxY).x,
+            gridToWorld(newMaxX, newMaxY).y,
+            content,
+            horizontalAlign,
+            verticalAlign,
+            showBorder
+          )
+          
+          // Update shape data
+          selectedShape.data.clear()
+          for (const [key, char] of textData) {
             selectedShape.data.set(key, char)
           }
           
