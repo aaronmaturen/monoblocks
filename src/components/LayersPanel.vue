@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useLayersStore } from '../stores/layers'
 import { useToolStore } from '../stores/tools'
-import type { Shape } from '../stores/layers'
+import type { Shape, Group } from '../stores/layers'
 
 const emit = defineEmits<{
   shapesChanged: []
@@ -10,398 +10,509 @@ const emit = defineEmits<{
 
 const layersStore = useLayersStore()
 const toolStore = useToolStore()
-const editingLayerId = ref<string | null>(null)
-const editingLayerName = ref('')
-const expandedLayers = ref<Set<string>>(new Set())
+
+// UI state
+const editingGroupId = ref<string | null>(null)
+const editingGroupName = ref('')
+const expandedGroups = ref<Set<string>>(new Set())
 
 // Drag and drop state
-const dragState = ref<{
-  type: 'layer' | 'shape' | null
-  layerId: string | null
-  shapeId: string | null
-  dragOverLayerId: string | null
-  dragOverShapeId: string | null
-  dragOverPosition: 'before' | 'after' | null
-}>({
-  type: null,
-  layerId: null,
-  shapeId: null,
-  dragOverLayerId: null,
-  dragOverShapeId: null,
-  dragOverPosition: null
+const draggedItem = ref<{ type: 'shape' | 'group', id: string } | null>(null)
+const dropPosition = ref<{ type: 'shape' | 'group', id: string, position: 'before' | 'after' } | null>(null)
+
+// Selection tracking
+const lastSelectedShapeId = ref<string | null>(null)
+
+// Check if we can group/ungroup
+const canGroup = computed(() => {
+  return layersStore.selectedShapeIds.size >= 2
 })
 
-// Computed property for active layer
-const activeLayer = computed(() => {
-  const activeLayerId = layersStore.activeLayerId
-  return layersStore.layers.find(layer => layer.id === activeLayerId)
+const canUngroup = computed(() => {
+  if (layersStore.selectedShapeIds.size !== 1) return false
+  const selectedId = Array.from(layersStore.selectedShapeIds)[0]
+  const shape = layersStore.shapes.find((s) => s.id === selectedId)
+  return shape?.groupId !== undefined
 })
 
-const startEditingLayer = (layerId: string, currentName: string) => {
-  editingLayerId.value = layerId
-  editingLayerName.value = currentName
+const selectedGroup = computed(() => {
+  if (layersStore.selectedShapeIds.size !== 1) return null
+  const selectedId = Array.from(layersStore.selectedShapeIds)[0]
+  const shape = layersStore.shapes.find((s) => s.id === selectedId)
+  if (!shape?.groupId) return null
+  return layersStore.groups.find((g) => g.id === shape.groupId)
+})
+
+// Group management
+const startEditingGroup = (groupId: string, currentName: string) => {
+  editingGroupId.value = groupId
+  editingGroupName.value = currentName
 }
 
-const saveLayerName = (layerId: string) => {
-  if (editingLayerName.value.trim()) {
-    layersStore.renameLayer(layerId, editingLayerName.value.trim())
+const saveGroupName = (groupId: string) => {
+  if (editingGroupName.value.trim()) {
+    const group = layersStore.groups.find((g) => g.id === groupId)
+    if (group) {
+      group.name = editingGroupName.value.trim()
+      layersStore.saveToStorage()
+    }
   }
-  editingLayerId.value = null
-  editingLayerName.value = ''
+  editingGroupId.value = null
+  editingGroupName.value = ''
 }
 
-const cancelEditingLayer = () => {
-  editingLayerId.value = null
-  editingLayerName.value = ''
+const cancelEditingGroup = () => {
+  editingGroupId.value = null
+  editingGroupName.value = ''
 }
 
-const handleKeydown = (e: KeyboardEvent, layerId: string) => {
+const handleKeydown = (e: KeyboardEvent, groupId: string) => {
   if (e.key === 'Enter') {
-    saveLayerName(layerId)
+    saveGroupName(groupId)
   } else if (e.key === 'Escape') {
-    cancelEditingLayer()
+    cancelEditingGroup()
   }
 }
 
-const addNewLayer = () => {
-  const newLayer = layersStore.addLayer()
-  layersStore.setActiveLayer(newLayer.id)
+// Group actions
+const createGroup = () => {
+  if (canGroup.value) {
+    layersStore.groupShapes()
+    emit('shapesChanged')
+  }
 }
 
-const toggleLayerExpanded = (layerId: string) => {
-  if (expandedLayers.value.has(layerId)) {
-    expandedLayers.value.delete(layerId)
+const ungroupSelected = () => {
+  if (selectedGroup.value) {
+    layersStore.ungroupShapes(selectedGroup.value.id)
+    emit('shapesChanged')
+  }
+}
+
+const toggleGroupExpanded = (groupId: string) => {
+  if (expandedGroups.value.has(groupId)) {
+    expandedGroups.value.delete(groupId)
   } else {
-    expandedLayers.value.add(layerId)
+    expandedGroups.value.add(groupId)
   }
+  // Also update in store for persistence
+  layersStore.toggleGroupExpanded(groupId)
 }
 
-const isLayerExpanded = (layerId: string) => {
-  return expandedLayers.value.has(layerId)
+const isGroupExpanded = (groupId: string) => {
+  return expandedGroups.value.has(groupId)
 }
 
-const formatShapeType = (type: string) => {
-  switch (type) {
-    case 'brush': return 'Brush'
-    case 'rectangle': return 'Rectangle'
-    case 'text': return 'Text'
-    default: return type
+// Shape selection
+const selectShape = (shapeId: string, event?: MouseEvent) => {
+  const isMultiSelect = event && (event.metaKey || event.ctrlKey)
+  const isRangeSelect = event && event.shiftKey
+
+  if (isRangeSelect && lastSelectedShapeId.value) {
+    // Range selection with shift-click
+    selectShapeRange(lastSelectedShapeId.value, shapeId)
+  } else {
+    // Single or toggle selection
+    layersStore.selectShape(shapeId, isMultiSelect)
+    lastSelectedShapeId.value = shapeId
   }
-}
 
-const formatTimestamp = (timestamp: number) => {
-  const date = new Date(timestamp)
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-const deleteShape = (layerId: string, shapeId: string) => {
-  layersStore.deleteShape(layerId, shapeId)
-  // Trigger a re-render by emitting an event to the parent
+  // Switch to select tool to show shape details
+  toolStore.setTool('select')
   emit('shapesChanged')
 }
 
+const selectShapeRange = (fromId: string, toId: string) => {
+  // Find all shapes in display order
+  const allShapes: string[] = []
+
+  // Add ungrouped shapes
+  layersStore
+    .getUngroupedShapes()
+    .sort((a, b) => a.order - b.order)
+    .forEach((shape) => allShapes.push(shape.id))
+
+  // Add grouped shapes
+  layersStore.groups
+    .sort((a, b) => a.order - b.order)
+    .forEach((group) => {
+      layersStore
+        .getShapesInGroup(group.id)
+        .sort((a, b) => a.order - b.order)
+        .forEach((shape) => allShapes.push(shape.id))
+    })
+
+  // Find indices
+  const fromIndex = allShapes.findIndex((id) => id === fromId)
+  const toIndex = allShapes.findIndex((id) => id === toId)
+
+  if (fromIndex === -1 || toIndex === -1) return
+
+  // Clear current selection and select range
+  layersStore.clearSelection()
+
+  const startIndex = Math.min(fromIndex, toIndex)
+  const endIndex = Math.max(fromIndex, toIndex)
+
+  for (let i = startIndex; i <= endIndex; i++) {
+    layersStore.selectShape(allShapes[i], true)
+  }
+
+  lastSelectedShapeId.value = toId
+}
+
+// Toggle shape visibility
+const toggleShapeVisibility = (shapeId: string) => {
+  const shape = layersStore.shapes.find((s) => s.id === shapeId)
+  if (shape) {
+    shape.visible = !shape.visible
+    layersStore.saveToStorage()
+    emit('shapesChanged')
+  }
+}
+
+// Shape actions
+const deleteShape = (shapeId: string) => {
+  // Find which layer contains this shape (if any)
+  const layer = layersStore.layers.find(l => l.shapes.some(s => s.id === shapeId))
+  if (layer) {
+    layersStore.deleteShape(layer.id, shapeId)
+  } else {
+    // Fallback: delete directly from shapes array if not in any layer
+    const index = layersStore.shapes.findIndex((s) => s.id === shapeId)
+    if (index !== -1) {
+      layersStore.shapes.splice(index, 1)
+      layersStore.saveToStorage()
+    }
+  }
+  emit('shapesChanged')
+}
+
+const deleteGroup = (groupId: string) => {
+  layersStore.deleteGroup(groupId)
+  emit('shapesChanged')
+}
+
+// Drag and drop functions
+const handleDragStart = (e: DragEvent, type: 'shape' | 'group', id: string) => {
+  draggedItem.value = { type, id }
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', JSON.stringify({ type, id }))
+  }
+}
+
+const handleDragOver = (e: DragEvent, type: 'shape' | 'group', id: string) => {
+  e.preventDefault()
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move'
+  }
+  
+  // Determine if we're in the top or bottom half
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const mouseY = e.clientY
+  const itemCenter = rect.top + rect.height / 2
+  const position = mouseY < itemCenter ? 'before' : 'after'
+  
+  dropPosition.value = { type, id, position }
+}
+
+const handleDragLeave = (e: DragEvent) => {
+  // Only clear if we're leaving the entire drop zone
+  if (!e.relatedTarget || !(e.relatedTarget as Element).closest('.shape-item, .group-container')) {
+    dropPosition.value = null
+  }
+}
+
+const handleDrop = (e: DragEvent, targetType: 'shape' | 'group', targetId: string) => {
+  e.preventDefault()
+  
+  if (!draggedItem.value || !dropPosition.value) return
+  
+  const { type: sourceType, id: sourceId } = draggedItem.value
+  const { position } = dropPosition.value
+  
+  // Don't drop on self
+  if (sourceType === targetType && sourceId === targetId) {
+    draggedItem.value = null
+    dropPosition.value = null
+    return
+  }
+  
+  // Calculate new order based on target position and drop position
+  let newOrder: number
+  
+  if (targetType === 'group') {
+    const targetGroup = layersStore.groups.find(g => g.id === targetId)
+    if (targetGroup) {
+      newOrder = position === 'before' ? targetGroup.order - 0.5 : targetGroup.order + 0.5
+    } else {
+      newOrder = 0
+    }
+  } else {
+    const targetShape = layersStore.shapes.find(s => s.id === targetId)
+    if (targetShape) {
+      newOrder = position === 'before' ? (targetShape.order || 0) - 0.5 : (targetShape.order || 0) + 0.5
+    } else {
+      newOrder = 0
+    }
+  }
+  
+  // Update order based on source type
+  if (sourceType === 'group') {
+    const sourceGroup = layersStore.groups.find(g => g.id === sourceId)
+    if (sourceGroup) {
+      sourceGroup.order = newOrder
+    }
+  } else {
+    const sourceShape = layersStore.shapes.find(s => s.id === sourceId)
+    if (sourceShape) {
+      sourceShape.order = newOrder
+    }
+  }
+  
+  // Normalize orders to prevent floating point accumulation
+  normalizeOrders()
+  
+  layersStore.saveToStorage()
+  emit('shapesChanged')
+  
+  draggedItem.value = null
+  dropPosition.value = null
+}
+
+const normalizeOrders = () => {
+  // Normalize group orders
+  const sortedGroups = [...layersStore.groups].sort((a, b) => a.order - b.order)
+  sortedGroups.forEach((group, index) => {
+    group.order = index
+  })
+  
+  // Normalize shape orders within each group and ungrouped
+  const groupedShapes = new Map<string | undefined, Shape[]>()
+  
+  layersStore.shapes.forEach(shape => {
+    const groupId = shape.groupId
+    if (!groupedShapes.has(groupId)) {
+      groupedShapes.set(groupId, [])
+    }
+    groupedShapes.get(groupId)!.push(shape)
+  })
+  
+  groupedShapes.forEach(shapes => {
+    const sorted = shapes.sort((a, b) => (a.order || 0) - (b.order || 0))
+    sorted.forEach((shape, index) => {
+      shape.order = index
+    })
+  })
+}
+
+// Utility functions
+const formatTimestamp = (timestamp: number) => {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const seconds = Math.floor(diff / 1000)
+
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+const formatShapeType = (type: string) => {
+  return type.charAt(0).toUpperCase() + type.slice(1)
+}
+
 const getShapePreview = (shape: Shape) => {
-  // Get first few characters from the shape for preview
-  const characters = Array.from(shape.data.values()).filter(char => char && char !== 'ERASE')
-  if (characters.length === 0) return 'Empty'
+  if (!shape.data || shape.data.size === 0) return '○'
+
+  const characters = Array.from(shape.data.values())
+    .filter((char) => char && char.trim())
+    .slice(0, 3)
+
+  if (characters.length === 0) return '○'
   if (characters.length === 1) return characters[0]
   return `${characters[0]}...`
 }
 
-const selectShape = (shapeId: string) => {
-  layersStore.selectShape(shapeId)
-  // Switch to select tool to show shape details in ToolSettingsPanel
-  toolStore.setTool('select')
-  emit('shapesChanged') // Trigger re-render to show selection
-}
-
-// Drag and drop handlers for layers
-const handleLayerDragStart = (e: DragEvent, layerId: string) => {
-  dragState.value.type = 'layer'
-  dragState.value.layerId = layerId
-  e.dataTransfer!.effectAllowed = 'move'
-  // Add dragging class for visual feedback
-  const target = e.target as HTMLElement
-  target.classList.add('dragging')
-}
-
-const handleLayerDragEnd = (e: DragEvent) => {
-  // Remove dragging class
-  const target = e.target as HTMLElement
-  target.classList.remove('dragging')
-  // Reset drag state
-  dragState.value = {
-    type: null,
-    layerId: null,
-    shapeId: null,
-    dragOverLayerId: null,
-    dragOverShapeId: null,
-    dragOverPosition: null
+// Initialize expanded groups
+layersStore.groups.forEach((group) => {
+  if (group.expanded) {
+    expandedGroups.value.add(group.id)
   }
-}
-
-const handleLayerDragOver = (e: DragEvent, layerId: string) => {
-  e.preventDefault()
-  if (dragState.value.type !== 'layer') return
-  if (dragState.value.layerId === layerId) return
-  
-  dragState.value.dragOverLayerId = layerId
-  
-  // Determine if we're dragging before or after
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  const midpoint = rect.top + rect.height / 2
-  dragState.value.dragOverPosition = e.clientY < midpoint ? 'before' : 'after'
-}
-
-const handleLayerDragLeave = () => {
-  dragState.value.dragOverLayerId = null
-  dragState.value.dragOverPosition = null
-}
-
-const handleLayerDrop = (e: DragEvent, targetLayerId: string) => {
-  e.preventDefault()
-  
-  if (dragState.value.type !== 'layer' || !dragState.value.layerId) return
-  if (dragState.value.layerId === targetLayerId) return
-  
-  const fromIndex = layersStore.layers.findIndex(l => l.id === dragState.value.layerId)
-  let toIndex = layersStore.layers.findIndex(l => l.id === targetLayerId)
-  
-  if (fromIndex === -1 || toIndex === -1) return
-  
-  // Since we're displaying in reverse, adjust the position logic
-  // 'before' in UI means 'after' in the actual array (higher index = more front)
-  // 'after' in UI means 'before' in the actual array (lower index = more back)
-  if (dragState.value.dragOverPosition === 'before') {
-    // Moving to position after the target (higher index, more front)
-    toIndex = toIndex + 1
-  }
-  
-  // Adjust for the removal of the dragged item
-  if (fromIndex < toIndex) {
-    toIndex = toIndex - 1
-  }
-  
-  layersStore.reorderLayers(fromIndex, toIndex)
-  emit('shapesChanged')
-}
-
-// Drag and drop handlers for shapes
-const handleShapeDragStart = (e: DragEvent, layerId: string, shapeId: string) => {
-  e.stopPropagation() // Prevent layer drag
-  dragState.value.type = 'shape'
-  dragState.value.layerId = layerId
-  dragState.value.shapeId = shapeId
-  e.dataTransfer!.effectAllowed = 'move'
-  // Add dragging class for visual feedback
-  const target = e.target as HTMLElement
-  target.classList.add('dragging')
-}
-
-const handleShapeDragEnd = (e: DragEvent) => {
-  e.stopPropagation()
-  // Remove dragging class
-  const target = e.target as HTMLElement
-  target.classList.remove('dragging')
-  // Reset drag state
-  dragState.value = {
-    type: null,
-    layerId: null,
-    shapeId: null,
-    dragOverLayerId: null,
-    dragOverShapeId: null,
-    dragOverPosition: null
-  }
-}
-
-const handleShapeDragOver = (e: DragEvent, layerId: string, shapeId: string) => {
-  e.preventDefault()
-  e.stopPropagation()
-  
-  if (dragState.value.type !== 'shape') return
-  if (dragState.value.layerId !== layerId) return // Can only reorder within same layer
-  if (dragState.value.shapeId === shapeId) return
-  
-  dragState.value.dragOverShapeId = shapeId
-  
-  // Determine if we're dragging before or after
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  const midpoint = rect.top + rect.height / 2
-  dragState.value.dragOverPosition = e.clientY < midpoint ? 'before' : 'after'
-}
-
-const handleShapeDragLeave = (e: DragEvent) => {
-  e.stopPropagation()
-  dragState.value.dragOverShapeId = null
-  dragState.value.dragOverPosition = null
-}
-
-const handleShapeDrop = (e: DragEvent, layerId: string, targetShapeId: string) => {
-  e.preventDefault()
-  e.stopPropagation()
-  
-  if (dragState.value.type !== 'shape' || !dragState.value.shapeId) return
-  if (dragState.value.layerId !== layerId) return // Can only reorder within same layer
-  if (dragState.value.shapeId === targetShapeId) return
-  
-  const layer = layersStore.layers.find(l => l.id === layerId)
-  if (!layer) return
-  
-  const fromIndex = layer.shapes.findIndex(s => s.id === dragState.value.shapeId)
-  let toIndex = layer.shapes.findIndex(s => s.id === targetShapeId)
-  
-  if (fromIndex === -1 || toIndex === -1) return
-  
-  // Since we're displaying shapes in reverse too, adjust the position logic
-  // 'before' in UI means 'after' in the actual array (higher index = more front)
-  // 'after' in UI means 'before' in the actual array (lower index = more back)
-  if (dragState.value.dragOverPosition === 'before') {
-    // Moving to position after the target (higher index, more front)
-    toIndex = toIndex + 1
-  }
-  
-  // Adjust for the removal of the dragged item
-  if (fromIndex < toIndex) {
-    toIndex = toIndex - 1
-  }
-  
-  layersStore.reorderShapes(layerId, fromIndex, toIndex)
-  emit('shapesChanged')
-}
+})
 </script>
 
 <template>
   <div class="layers-panel">
     <div class="panel-header">
-      <span class="panel-title">Layers</span>
-      <button @click="addNewLayer" class="add-layer-button" title="Add new layer">
-        <i class="fa-thumbprint fa-light fa-plus"></i>
-      </button>
-    </div>
-    
-    <div class="layers-list">
-      <div 
-        v-for="(layer, layerIndex) in [...layersStore.layers].reverse()" 
-        :key="layer.id"
-        class="layer-container"
-      >
-        <div 
-          :class="['layer-item', { 
-            active: layersStore.activeLayerId === layer.id,
-            'drag-over-before': dragState.dragOverLayerId === layer.id && dragState.dragOverPosition === 'before',
-            'drag-over-after': dragState.dragOverLayerId === layer.id && dragState.dragOverPosition === 'after'
-          }]"
-          @click="layersStore.setActiveLayer(layer.id)"
-          draggable="true"
-          @dragstart="handleLayerDragStart($event, layer.id)"
-          @dragend="handleLayerDragEnd"
-          @dragover="handleLayerDragOver($event, layer.id)"
-          @dragleave="handleLayerDragLeave"
-          @drop="handleLayerDrop($event, layer.id)"
+      <h3><i class="fa-duotone fa-solid fa-layer-group"></i> Shapes</h3>
+      <div class="header-actions">
+        <button
+          v-if="canGroup"
+          @click="createGroup"
+          class="action-button group-button"
+          title="Group selected shapes"
         >
-          <div class="layer-controls">
-            <button 
-              class="drag-handle"
-              title="Drag to reorder"
-            >
-              <i class="fa-thumbprint fa-light fa-grip-vertical"></i>
-            </button>
-            <button 
-              @click.stop="layersStore.toggleLayerVisibility(layer.id)"
-              :class="['visibility-button', { invisible: !layer.visible }]"
-              :title="layer.visible ? 'Hide layer' : 'Show layer'"
-            >
-              <i v-if="layer.visible" class="fa-thumbprint fa-light fa-eye"></i>
-              <i v-else class="fa-thumbprint fa-light fa-eye-slash"></i>
-            </button>
-            
-            <button 
-              v-if="layer.shapes.length > 0"
-              @click.stop="toggleLayerExpanded(layer.id)"
-              class="expand-button"
-              :title="isLayerExpanded(layer.id) ? 'Collapse layer' : 'Expand layer'"
-            >
-              <span v-if="isLayerExpanded(layer.id)">▼</span>
-              <span v-else>▶</span>
-            </button>
+          <i class="fa-sharp fa-duotone fa-object-group"></i>
+        </button>
+        <button
+          v-if="canUngroup"
+          @click="ungroupSelected"
+          class="action-button ungroup-button"
+          title="Ungroup selected"
+        >
+          <i class="fa-sharp fa-duotone fa-object-ungroup"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="shapes-list">
+      <!-- Ungrouped shapes -->
+      <div v-if="layersStore.getUngroupedShapes().length > 0" class="ungrouped-section">
+        <div
+          v-for="shape in layersStore.getUngroupedShapes().sort((a, b) => b.order - a.order)"
+          :key="shape.id"
+          :class="[
+            'shape-item',
+            {
+              selected: layersStore.isShapeSelected(shape.id),
+              'primary-selected': layersStore.selectedShapeId === shape.id,
+              'drop-before': dropPosition?.type === 'shape' && dropPosition?.id === shape.id && dropPosition?.position === 'before',
+              'drop-after': dropPosition?.type === 'shape' && dropPosition?.id === shape.id && dropPosition?.position === 'after',
+            },
+          ]"
+          draggable="true"
+          @click="selectShape(shape.id, $event)"
+          @dragstart="handleDragStart($event, 'shape', shape.id)"
+          @dragover="handleDragOver($event, 'shape', shape.id)"
+          @dragleave="handleDragLeave($event)"
+          @drop="handleDrop($event, 'shape', shape.id)"
+        >
+          <div class="shape-preview" :style="{ color: shape.color }">
+            {{ getShapePreview(shape) }}
           </div>
-          
-          <div class="layer-content">
-            <div v-if="editingLayerId === layer.id" class="layer-name-edit">
-              <input 
-                v-model="editingLayerName"
-                @keydown="handleKeydown($event, layer.id)"
-                @blur="saveLayerName(layer.id)"
-                class="layer-name-input"
-                ref="layerNameInput"
-              />
-            </div>
-            <div v-else class="layer-info">
-              <div 
-                class="layer-name" 
-                @dblclick="startEditingLayer(layer.id, layer.name)"
-                :title="'Double-click to rename'"
-              >
-                {{ layer.name }}
-              </div>
-              <div class="layer-stats">
-                {{ layer.shapes.length }} shape{{ layer.shapes.length !== 1 ? 's' : '' }}
-              </div>
+          <div class="shape-info">
+            <div class="shape-name">{{ shape.name }}</div>
+            <div class="shape-details">
+              <span class="shape-type">{{ formatShapeType(shape.type) }}</span>
+              <span class="shape-time">{{ formatTimestamp(shape.timestamp) }}</span>
             </div>
           </div>
-          
-          <div class="layer-actions">
-            <button 
-              v-if="layerIndex > 0"
-              @click.stop="layersStore.moveLayerUp(layer.id); emit('shapesChanged')"
-              class="order-button"
-              title="Move up (to front)"
+          <div class="shape-actions">
+            <button
+              @click.stop="toggleShapeVisibility(shape.id)"
+              class="visibility-button"
+              :class="{ hidden: !shape.visible }"
             >
-              <i class="fa-thumbprint fa-light fa-arrow-up"></i>
+              <i
+                :class="
+                  shape.visible ? 'fa-duotone fa-solid fa-eye' : 'fa-duotone fa-solid fa-eye-slash'
+                "
+              ></i>
             </button>
-            <button 
-              v-if="layerIndex < layersStore.layers.length - 1"
-              @click.stop="layersStore.moveLayerDown(layer.id); emit('shapesChanged')"
-              class="order-button"
-              title="Move down (to back)"
-            >
-              <i class="fa-thumbprint fa-light fa-arrow-down"></i>
-            </button>
-            <button 
-              v-if="layersStore.layers.length > 1"
-              @click.stop="layersStore.deleteLayer(layer.id)"
-              class="delete-button"
-              title="Delete layer"
-            >
-              <i class="fa-thumbprint fa-light fa-trash"></i>
+            <button @click.stop="deleteShape(shape.id)" class="delete-button">
+              <i class="fa-duotone fa-solid fa-trash"></i>
             </button>
           </div>
         </div>
-        
-        <!-- Expanded shapes list -->
-        <div v-if="isLayerExpanded(layer.id)" class="shapes-list">
-          <div 
-            v-for="(shape, shapeIndex) in [...layer.shapes].reverse()" 
-            :key="shape.id"
-            :class="['shape-item', { 
-              selected: layersStore.selectedShapeId === shape.id,
-              'drag-over-before': dragState.dragOverShapeId === shape.id && dragState.dragOverPosition === 'before',
-              'drag-over-after': dragState.dragOverShapeId === shape.id && dragState.dragOverPosition === 'after'
-            }]"
-            @click="selectShape(shape.id)"
-            draggable="true"
-            @dragstart="handleShapeDragStart($event, layer.id, shape.id)"
-            @dragend="handleShapeDragEnd"
-            @dragover="handleShapeDragOver($event, layer.id, shape.id)"
-            @dragleave="handleShapeDragLeave"
-            @drop="handleShapeDrop($event, layer.id, shape.id)"
+      </div>
+
+      <!-- Groups -->
+      <div
+        v-for="group in layersStore.groups.sort((a, b) => b.order - a.order)"
+        :key="group.id"
+        :class="[
+          'group-container',
+          {
+            'drop-before': dropPosition?.type === 'group' && dropPosition?.id === group.id && dropPosition?.position === 'before',
+            'drop-after': dropPosition?.type === 'group' && dropPosition?.id === group.id && dropPosition?.position === 'after',
+          },
+        ]"
+      >
+        <div 
+          class="group-header"
+          draggable="true"
+          @dragstart="handleDragStart($event, 'group', group.id)"
+          @dragover="handleDragOver($event, 'group', group.id)"
+          @dragleave="handleDragLeave($event)"
+          @drop="handleDrop($event, 'group', group.id)"
+        >
+          <button @click="toggleGroupExpanded(group.id)" class="expand-button">
+            <i
+              :class="
+                isGroupExpanded(group.id)
+                  ? 'fa-duotone fa-solid fa-chevron-down'
+                  : 'fa-duotone fa-solid fa-chevron-right'
+              "
+            ></i>
+          </button>
+
+          <div
+            v-if="editingGroupId !== group.id"
+            class="group-name"
+            @dblclick="startEditingGroup(group.id, group.name)"
           >
-            <button 
-              class="shape-drag-handle"
-              title="Drag to reorder"
+            {{ group.name }}
+          </div>
+          <input
+            v-else
+            v-model="editingGroupName"
+            @blur="saveGroupName(group.id)"
+            @keydown="handleKeydown($event, group.id)"
+            class="group-name-input"
+            :placeholder="group.name"
+            autofocus
+          />
+
+          <div class="group-count">{{ layersStore.getShapesInGroup(group.id).length }} shapes</div>
+
+          <div class="group-actions">
+            <button
+              @click.stop="layersStore.toggleGroupVisibility(group.id)"
+              class="visibility-button"
+              :class="{ hidden: !group.visible }"
             >
-              <i class="fa-thumbprint fa-light fa-grip-vertical"></i>
+              <i
+                :class="
+                  group.visible ? 'fa-duotone fa-solid fa-eye' : 'fa-duotone fa-solid fa-eye-slash'
+                "
+              ></i>
             </button>
+            <button @click.stop="deleteGroup(group.id)" class="delete-button">
+              <i class="fa-duotone fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Shapes in group -->
+        <div v-if="isGroupExpanded(group.id)" class="group-shapes">
+          <div
+            v-for="shape in layersStore
+              .getShapesInGroup(group.id)
+              .sort((a, b) => b.order - a.order)"
+            :key="shape.id"
+            :class="[
+              'shape-item',
+              'grouped',
+              {
+                selected: layersStore.isShapeSelected(shape.id),
+                'primary-selected': layersStore.selectedShapeId === shape.id,
+                'drop-before': dropPosition?.type === 'shape' && dropPosition?.id === shape.id && dropPosition?.position === 'before',
+                'drop-after': dropPosition?.type === 'shape' && dropPosition?.id === shape.id && dropPosition?.position === 'after',
+              },
+            ]"
+            draggable="true"
+            @click="selectShape(shape.id, $event)"
+            @dragstart="handleDragStart($event, 'shape', shape.id)"
+            @dragover="handleDragOver($event, 'shape', shape.id)"
+            @dragleave="handleDragLeave($event)"
+            @drop="handleDrop($event, 'shape', shape.id)"
+          >
             <div class="shape-preview" :style="{ color: shape.color }">
               {{ getShapePreview(shape) }}
             </div>
@@ -413,39 +524,12 @@ const handleShapeDrop = (e: DragEvent, layerId: string, targetShapeId: string) =
               </div>
             </div>
             <div class="shape-actions">
-              <button 
-                v-if="shapeIndex > 0"
-                @click.stop="layersStore.moveShapeUp(layer.id, shape.id); emit('shapesChanged')"
-                class="shape-order-button"
-                title="Move up (to front)"
-              >
-                <i class="fa-thumbprint fa-light fa-arrow-up"></i>
-              </button>
-              <button 
-                v-if="shapeIndex < layer.shapes.length - 1"
-                @click.stop="layersStore.moveShapeDown(layer.id, shape.id); emit('shapesChanged')"
-                class="shape-order-button"
-                title="Move down (to back)"
-              >
-                <i class="fa-thumbprint fa-light fa-arrow-down"></i>
-              </button>
-              <button 
-                @click.stop="deleteShape(layer.id, shape.id)"
-                class="delete-shape-button"
-                title="Delete shape"
-              >
-                <i class="fa-thumbprint fa-light fa-trash"></i>
+              <button @click.stop="deleteShape(shape.id)" class="delete-button">
+                <i class="fa-duotone fa-solid fa-trash"></i>
               </button>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-    
-    <div class="panel-footer">
-      <div class="active-layer-info">
-        <span class="active-label">Active:</span>
-        <span class="active-layer-name">{{ activeLayer?.name || 'None' }}</span>
       </div>
     </div>
   </div>
@@ -455,340 +539,175 @@ const handleShapeDrop = (e: DragEvent, layerId: string, targetShapeId: string) =
 .layers-panel {
   position: fixed;
   left: 20px;
-  top: 20px;
-  width: 240px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
-  box-shadow: var(--shadow-light);
-  backdrop-filter: var(--backdrop-blur);
-  z-index: 1000;
-  pointer-events: auto;
-  max-height: 60vh;
+  top: 80px;
+  width: 280px;
+  max-height: calc(100vh - 100px);
   display: flex;
   flex-direction: column;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 100;
 }
 
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
-  background: var(--bg-secondary);
-  border-radius: 12px 12px 0 0;
+  padding: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.panel-title {
-  font-weight: 600;
+.panel-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
   font-size: 14px;
-  color: var(--text-primary);
-}
-
-.add-layer-button {
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 6px;
-  background: var(--bg-active);
-  color: var(--text-white);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  transition: all 0.2s ease;
-}
-
-.add-layer-button:hover {
-  background: var(--bg-active-hover);
-  transform: scale(1.05);
-}
-
-.layers-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-  max-height: 50vh;
-}
-
-.layer-container {
-  margin-bottom: 4px;
-}
-
-.layer-item {
-  display: flex;
-  align-items: center;
-  padding: 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 2px solid transparent;
-}
-
-.layer-item:hover {
-  background: var(--bg-hover);
-}
-
-.layer-item.active {
-  background: var(--layer-bg-selected);
-  border-color: var(--border-active);
-}
-
-.layer-controls {
-  display: flex;
-  align-items: center;
-  margin-right: 8px;
-}
-
-.drag-handle,
-.shape-drag-handle {
-  width: 16px;
-  height: 20px;
-  border: none;
-  background: none;
-  cursor: grab;
-  color: #999;
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  padding: 0;
-  margin-right: 4px;
-}
-
-.drag-handle:hover,
-.shape-drag-handle:hover {
-  color: #666;
-}
-
-.dragging {
-  opacity: 0.5;
-  cursor: grabbing !important;
-}
-
-.drag-over-before {
-  border-top: 2px solid #007acc !important;
-}
-
-.drag-over-after {
-  border-bottom: 2px solid #007acc !important;
-}
-
-.visibility-button {
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #666;
-  font-size: 12px;
-  transition: all 0.2s ease;
-}
-
-.visibility-button:hover {
-  background: #e0e0e0;
+  font-weight: 600;
   color: #333;
 }
 
-.visibility-button.invisible {
-  color: #ccc;
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-button {
+  padding: 6px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.action-button:hover {
+  background: rgba(79, 195, 247, 0.1);
+  border-color: #4fc3f7;
+}
+
+.shapes-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.ungrouped-section {
+  margin-bottom: 12px;
+}
+
+.group-container {
+  margin-bottom: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.02);
+  cursor: pointer;
+}
+
+.group-header:hover {
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .expand-button {
-  width: 20px;
-  height: 20px;
+  padding: 4px;
+  margin-right: 8px;
   border: none;
   background: none;
   cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 10px;
   color: #666;
-  font-size: 12px;
-  transition: all 0.2s ease;
-  margin-left: 2px;
+  transition: transform 0.2s ease;
 }
 
-.expand-button:hover {
-  background: #e0e0e0;
-  color: #333;
-}
-
-.layer-content {
+.group-name {
   flex: 1;
-  min-width: 0;
-}
-
-.layer-name {
   font-weight: 500;
   font-size: 13px;
   color: #333;
-  margin-bottom: 2px;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.layer-name:hover {
-  color: #007acc;
-}
-
-.layer-stats {
-  font-size: 11px;
-  color: #666;
-}
-
-.layer-name-edit {
-  width: 100%;
-}
-
-.layer-name-input {
-  width: 100%;
-  padding: 2px 6px;
-  border: 1px solid #007acc;
+.group-name-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #4fc3f7;
   border-radius: 4px;
   font-size: 13px;
-  font-weight: 500;
-  background: white;
   outline: none;
 }
 
-.layer-actions {
-  display: flex;
-  align-items: center;
-  margin-left: 8px;
-}
-
-.order-button,
-.delete-button {
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.group-count {
+  margin-right: 12px;
+  font-size: 11px;
   color: #999;
-  font-size: 12px;
-  transition: all 0.2s ease;
-  margin-left: 2px;
 }
 
-.order-button:hover {
-  background: #e3f2fd;
-  color: #1976d2;
-}
-
-.delete-button:hover {
-  background: #ffe6e6;
-  color: #d32f2f;
-}
-
-.panel-footer {
-  padding: 8px 16px;
-  border-top: 1px solid #e1e1e1;
-  background: rgba(247, 247, 247, 0.8);
-  border-radius: 0 0 12px 12px;
-}
-
-.active-layer-info {
+.group-actions {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
-.active-label {
-  font-size: 11px;
-  color: #666;
-  font-weight: 500;
-}
-
-.active-layer-name {
-  font-size: 11px;
-  color: #007acc;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-
-/* Scrollbar styling */
-.layers-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.layers-list::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
-
-.layers-list::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
-}
-
-.layers-list::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
-}
-
-/* Shapes list styles */
-.shapes-list {
-  margin-left: 16px;
-  margin-top: 4px;
-  padding-left: 12px;
-  border-left: 2px solid #e1e1e1;
+.group-shapes {
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.01);
 }
 
 .shape-item {
   display: flex;
   align-items: center;
-  padding: 6px 8px;
-  margin-bottom: 2px;
+  padding: 8px;
+  margin-bottom: 4px;
   border-radius: 6px;
-  background: var(--shape-bg);
+  cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.shape-item.grouped {
+  margin-left: 24px;
 }
 
 .shape-item:hover {
-  background: var(--shape-bg-hover);
-  cursor: pointer;
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .shape-item.selected {
-  background: var(--shape-bg-selected);
-  border: 1px solid var(--border-active);
+  background: rgba(79, 195, 247, 0.1);
+  border: 1px solid rgba(79, 195, 247, 0.3);
+}
+
+.shape-item.primary-selected {
+  background: rgba(79, 195, 247, 0.15);
+  border: 1px solid #4fc3f7;
+  box-shadow: inset 0 0 0 1px rgba(79, 195, 247, 0.2);
 }
 
 .shape-item.selected:hover {
-  background: var(--shape-bg-selected-hover);
+  background: rgba(79, 195, 247, 0.2);
+}
+
+.shape-item.primary-selected:hover {
+  background: rgba(79, 195, 247, 0.25);
 }
 
 .shape-preview {
   width: 20px;
   height: 16px;
+  margin-right: 12px;
+  font-family: monospace;
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--mono-font-family);
-  font-weight: bold;
-  font-size: 10px;
-  margin-right: 8px;
-  background: rgba(255, 255, 255, 0.8);
-  border-radius: 3px;
-  border: 1px solid #ddd;
 }
 
 .shape-info {
@@ -797,64 +716,106 @@ const handleShapeDrop = (e: DragEvent, layerId: string, targetShapeId: string) =
 }
 
 .shape-name {
+  font-size: 13px;
   font-weight: 500;
   color: #333;
-  margin-bottom: 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 11px;
 }
 
 .shape-details {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 9px;
-  color: #666;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 .shape-type {
-  background: #e3f2fd;
-  color: #1976d2;
-  padding: 1px 4px;
+  font-size: 11px;
+  color: #666;
+  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.05);
   border-radius: 3px;
-  font-weight: 500;
 }
 
 .shape-time {
+  font-size: 11px;
   color: #999;
 }
 
 .shape-actions {
   display: flex;
-  align-items: center;
-  gap: 2px;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.shape-order-button,
-.delete-shape-button {
-  width: 16px;
-  height: 16px;
+.shape-item:hover .shape-actions,
+.group-header:hover .group-actions {
+  opacity: 1;
+}
+
+.visibility-button,
+.delete-button {
+  padding: 4px 6px;
   border: none;
   background: none;
   cursor: pointer;
-  border-radius: 3px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #999;
-  font-size: 10px;
+  font-size: 12px;
+  color: #666;
   transition: all 0.2s ease;
 }
 
-.shape-order-button:hover {
-  background: #e3f2fd;
-  color: #1976d2;
+.visibility-button:hover {
+  color: #4fc3f7;
 }
 
-.delete-shape-button:hover {
-  background: #ffe6e6;
-  color: #d32f2f;
+.visibility-button.hidden {
+  color: #ccc;
+}
+
+.delete-button:hover {
+  color: #f44336;
+}
+
+/* Drag and drop styles */
+.shape-item[draggable="true"],
+.group-header[draggable="true"] {
+  cursor: grab;
+}
+
+.shape-item[draggable="true"]:active,
+.group-header[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Drop insertion lines */
+.shape-item.drop-before::before,
+.shape-item.drop-after::after,
+.group-container.drop-before::before,
+.group-container.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #4fc3f7;
+  z-index: 10;
+  box-shadow: 0 0 4px rgba(79, 195, 247, 0.5);
+}
+
+.shape-item.drop-before::before,
+.group-container.drop-before::before {
+  top: -1px;
+}
+
+.shape-item.drop-after::after,
+.group-container.drop-after::after {
+  bottom: -1px;
+}
+
+.shape-item,
+.group-container {
+  position: relative;
 }
 </style>

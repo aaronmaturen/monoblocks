@@ -17,7 +17,7 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
-    "@awesome.me/kit-d20ba098c9": "^1.0.7",
+    "@awesome.me/kit-8b9cf084d8": "^1.0.4",
     "html2canvas": "^1.4.1",
     "pinia": "^3.0.3",
     "vue": "^3.5.18"

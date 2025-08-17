@@ -184,13 +184,24 @@ export const RECTANGLE_BORDER_STYLES = {
 }
 
 export const useToolStore = defineStore('tools', () => {
-  const currentTool = ref<Tool>('pan')
-  const previousTool = ref<Tool>('pan')
+  const currentTool = ref<Tool>('select')
+  const previousTool = ref<Tool>('select')
   const selectedCharacter = ref('▊') // Default drawing character
   const showCharacterPalette = ref(false)
   const rectangleBorderStyle = ref<RectangleBorderStyle>('single')
   const rectangleFillChar = ref<string>('') // Empty string means no fill
   const rectangleShadow = ref(false) // Enable/disable shadow for rectangles
+  const rectangleText = ref<string>('') // Text to display inside rectangle
+  const rectangleTextAlign = ref<string>('center') // Text alignment in rectangle
+  const rectangleTextPosition = ref<string>('middle') // Text position in rectangle
+  const rectangleTextColor = ref<string>('#000000') // Text color in rectangle
+  
+  // Rectangle checkbox states for enabling/disabling features
+  const rectangleShowText = ref(true)
+  const rectangleShowFill = ref(true)
+  const rectangleShowBorder = ref(true)
+  const rectangleShowShadow = ref(false)
+  
   const lineStyle = ref<LineStyle>('single')
   const lineStartStyle = ref<LineEndStyle>('none')
   const lineEndStyle = ref<LineEndStyle>('arrow')
@@ -204,15 +215,8 @@ export const useToolStore = defineStore('tools', () => {
 
   const setTool = (tool: Tool) => {
     currentTool.value = tool
-    // Unselect any selected shapes when switching tools
-    // Keep selection for eyedropper since it's non-destructive
-    if (tool !== 'select' && tool !== 'eyedropper') {
-      // Lazy import to avoid circular dependency
-      import('./layers').then(({ useLayersStore }) => {
-        const layersStore = useLayersStore()
-        layersStore.selectShape(null)
-      })
-    }
+    // Note: Shape deselection when switching tools is now handled in components
+    // to avoid circular dependency between stores
   }
 
   const setPreviousTool = (tool: Tool) => {
@@ -245,6 +249,38 @@ export const useToolStore = defineStore('tools', () => {
 
   const setRectangleShadow = (enabled: boolean) => {
     rectangleShadow.value = enabled
+  }
+
+  const setRectangleText = (text: string) => {
+    rectangleText.value = text
+  }
+  
+  const setRectangleTextAlign = (align: string) => {
+    rectangleTextAlign.value = align
+  }
+  
+  const setRectangleTextPosition = (position: string) => {
+    rectangleTextPosition.value = position
+  }
+  
+  const setRectangleTextColor = (color: string) => {
+    rectangleTextColor.value = color
+  }
+  
+  const setRectangleShowText = (show: boolean) => {
+    rectangleShowText.value = show
+  }
+  
+  const setRectangleShowFill = (show: boolean) => {
+    rectangleShowFill.value = show
+  }
+  
+  const setRectangleShowBorder = (show: boolean) => {
+    rectangleShowBorder.value = show
+  }
+  
+  const setRectangleShowShadow = (show: boolean) => {
+    rectangleShowShadow.value = show
   }
 
   const setLineStyle = (style: LineStyle) => {
@@ -287,6 +323,14 @@ export const useToolStore = defineStore('tools', () => {
     rectangleBorderStyle,
     rectangleFillChar,
     rectangleShadow,
+    rectangleText,
+    rectangleTextAlign,
+    rectangleTextPosition,
+    rectangleTextColor,
+    rectangleShowText,
+    rectangleShowFill,
+    rectangleShowBorder,
+    rectangleShowShadow,
     lineStyle,
     lineStartStyle,
     lineEndStyle,
@@ -304,6 +348,14 @@ export const useToolStore = defineStore('tools', () => {
     setRectangleBorderStyle,
     setRectangleFillChar,
     setRectangleShadow,
+    setRectangleText,
+    setRectangleTextAlign,
+    setRectangleTextPosition,
+    setRectangleTextColor,
+    setRectangleShowText,
+    setRectangleShowFill,
+    setRectangleShowBorder,
+    setRectangleShowShadow,
     setLineStyle,
     setLineStartStyle,
     setLineEndStyle,

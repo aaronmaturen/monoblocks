@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { useToolStore, type Tool } from '../stores/tools'
 import { useHistoryStore } from '../stores/history'
-import { useColorStore } from '../stores/colors'
 import { useAppStore } from '../stores/app'
 
 const toolStore = useToolStore()
 const historyStore = useHistoryStore()
-const colorStore = useColorStore()
 const appStore = useAppStore()
 
 const tools: Array<{ id: Tool; label: string }> = [
@@ -17,7 +15,6 @@ const tools: Array<{ id: Tool; label: string }> = [
   { id: 'text', label: 'Text' },
   { id: 'select', label: 'Select' },
   { id: 'eraser', label: 'Eraser' },
-  { id: 'eyedropper', label: 'Color Palette' },
 ]
 
 const historyTools: Array<{ id: Tool; label: string }> = [
@@ -55,14 +52,8 @@ const selectTool = (toolId: Tool) => {
     return // Don't change tool
   }
 
-  // Save previous tool before switching to palette
-  if (toolId === 'eyedropper') {
-    toolStore.setPreviousTool(toolStore.currentTool)
-    toolStore.setTool(toolId)
-    colorStore.showColorSelector()
-  } else {
-    toolStore.setTool(toolId)
-  }
+  // Set the selected tool
+  toolStore.setTool(toolId)
 }
 </script>
 
@@ -135,8 +126,7 @@ const selectTool = (toolId: Tool) => {
         <!-- Eraser Icon -->
         <i v-if="tool.id === 'eraser'" class="fa-thumbprint fa-light fa-wand-magic-sparkles"></i>
 
-        <!-- Eyedropper Icon -->
-        <i v-if="tool.id === 'eyedropper'" class="fa-thumbprint fa-light fa-palette"></i>
+
       </button>
 
       <!-- Separator -->
@@ -257,9 +247,7 @@ const selectTool = (toolId: Tool) => {
 .tool-button:has(.fa-wand-magic-sparkles) i {
   color: var(--icon-eraser);
 }
-.tool-button:has(.fa-palette) i {
-  color: var(--icon-palette);
-}
+
 
 /* Utility Icons */
 .tool-button:has(.fa-grid) i {

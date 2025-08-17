@@ -8,13 +8,23 @@
       >
         <i :class="['fa-thumbprint', 'fa-light', getIconClass(toast.type)]"></i>
         <span class="toast-message">{{ toast.message }}</span>
+        <div v-if="toast.actions && toast.actions.length > 0" class="toast-actions">
+          <button
+            v-for="(action, index) in toast.actions"
+            :key="index"
+            @click="handleAction(toast.id, action)"
+            class="toast-action-button"
+          >
+            {{ action.label }}
+          </button>
+        </div>
       </div>
     </TransitionGroup>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { useToastStore, type Toast } from '@/stores/toast'
+import { useToastStore, type Toast, type ToastAction } from '@/stores/toast'
 
 const toastStore = useToastStore()
 
@@ -26,9 +36,16 @@ const getIconClass = (type: Toast['type']) => {
       return 'fa-thumbs-down'
     case 'info':
       return 'fa-thumbtack'
+    case 'warning':
+      return 'fa-exclamation-triangle'
     default:
       return 'fa-thumbtack'
   }
+}
+
+const handleAction = (toastId: number, action: ToastAction) => {
+  action.action()
+  toastStore.removeToast(toastId)
 }
 </script>
 
@@ -94,8 +111,40 @@ const getIconClass = (type: Toast['type']) => {
   color: #3b82f6;
 }
 
+.toast-warning {
+  border-color: #f59e0b;
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.toast-warning i {
+  color: #f59e0b;
+}
+
 .toast-message {
   color: var(--text-primary);
+  flex: 1;
+}
+
+.toast-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.toast-action-button {
+  padding: 6px 12px;
+  background: var(--bg-active);
+  color: var(--text-white);
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.toast-action-button:hover {
+  background: var(--bg-active-hover);
 }
 
 /* Animation */
