@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { useCoordinateSystem } from '../canvas/useCoordinateSystem'
-import { useLayersStore, type Shape } from '../../stores/layers'
+import { useShapesStore, type Shape } from '../../stores/shapes'
 import { useToolStore } from '../../stores/tools'
 
 export interface ShapeBounds {
@@ -14,11 +14,11 @@ export type AnchorType = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight' |
 
 export function useSelection() {
   const { worldToGrid, gridToWorld, gridKey } = useCoordinateSystem()
-  const layersStore = useLayersStore()
+  const shapesStore = useShapesStore()
   const toolStore = useToolStore()
 
   // Get currently selected shapes
-  const selectedShapes = computed(() => layersStore.getSelectedShapes())
+  const selectedShapes = computed(() => shapesStore.getSelectedShapes())
 
   // Get bounds of a shape in grid coordinates
   const getShapeBounds = (shape: Shape): ShapeBounds => {
@@ -28,7 +28,9 @@ export function useSelection() {
     let maxY = -Infinity
     
     for (const [key, char] of shape.data) {
-      if (char && char !== '') {
+      // Include empty strings (invisible placeholders) but exclude shadow characters
+      // Empty strings maintain bounds but don't render
+      if ((char !== null && char !== undefined && char !== '▓') || char === '') {
         const [x, y] = key.split(',').map(Number)
         minX = Math.min(minX, x)
         maxX = Math.max(maxX, x)
@@ -42,7 +44,7 @@ export function useSelection() {
 
   // Check if a position is over an anchor
   const getAnchorAtPosition = (gridX: number, gridY: number, shape: Shape): AnchorType | null => {
-    if (!shape || (shape.type !== 'rectangle' && shape.type !== 'line' && shape.type !== 'text')) return null
+    if (!shape || (shape.type !== 'rectangle' && shape.type !== 'line' && shape.type !== 'text' && shape.type !== 'diamond')) return null
     
     const bounds = getShapeBounds(shape)
     const tolerance = 0.5 // Grid units tolerance for clicking anchors (reduced since anchors are now outside)
@@ -62,6 +64,15 @@ export function useSelection() {
       if (Math.abs(gridX - (bounds.maxX + 1)) <= tolerance && Math.abs(gridY - midY) <= tolerance) return 'right'
       if (Math.abs(gridX - midX) <= tolerance && Math.abs(gridY - (bounds.minY - 1)) <= tolerance) return 'top'
       if (Math.abs(gridX - midX) <= tolerance && Math.abs(gridY - (bounds.maxY + 1)) <= tolerance) return 'bottom'
+    } else if (shape.type === 'diamond') {
+      const midX = Math.round((bounds.minX + bounds.maxX) / 2)
+      const midY = Math.round((bounds.minY + bounds.maxY) / 2)
+      
+      // For diamonds, only check edge anchors (no corners)
+      if (Math.abs(gridX - (bounds.minX - 1)) <= tolerance && Math.abs(gridY - midY) <= tolerance) return 'left'
+      if (Math.abs(gridX - (bounds.maxX + 1)) <= tolerance && Math.abs(gridY - midY) <= tolerance) return 'right'
+      if (Math.abs(gridX - midX) <= tolerance && Math.abs(gridY - (bounds.minY - 1)) <= tolerance) return 'top'
+      if (Math.abs(gridX - midX) <= tolerance && Math.abs(gridY - (bounds.maxY + 1)) <= tolerance) return 'bottom'
     } else if (shape.type === 'line') {
       // For lines, anchors are at the start and end points, slightly offset
       if (bounds.minX === bounds.maxX) {
@@ -77,6 +88,12 @@ export function useSelection() {
         if (Math.abs(gridX - (bounds.minX - 1)) <= tolerance && Math.abs(gridY - (bounds.minY - 1)) <= tolerance) return 'start'
         if (Math.abs(gridX - (bounds.maxX + 1)) <= tolerance && Math.abs(gridY - (bounds.maxY + 1)) <= tolerance) return 'end'
       }
+    } else if (shape.type === 'image') {
+      // For images, only corner anchors (no edge anchors)
+      if (Math.abs(gridX - (bounds.minX - 1)) <= tolerance && Math.abs(gridY - (bounds.minY - 1)) <= tolerance) return 'topLeft'
+      if (Math.abs(gridX - (bounds.maxX + 1)) <= tolerance && Math.abs(gridY - (bounds.minY - 1)) <= tolerance) return 'topRight'
+      if (Math.abs(gridX - (bounds.minX - 1)) <= tolerance && Math.abs(gridY - (bounds.maxY + 1)) <= tolerance) return 'bottomLeft'
+      if (Math.abs(gridX - (bounds.maxX + 1)) <= tolerance && Math.abs(gridY - (bounds.maxY + 1)) <= tolerance) return 'bottomRight'
     }
     
     return null
@@ -123,6 +140,16 @@ export function useSelection() {
       drawAnchor(bounds.maxX + 1, midY) // Right
       drawAnchor(midX, bounds.minY - 1) // Top
       drawAnchor(midX, bounds.maxY + 1) // Bottom
+    } else if (shape.type === 'diamond') {
+      const midX = Math.round((bounds.minX + bounds.maxX) / 2)
+      const midY = Math.round((bounds.minY + bounds.maxY) / 2)
+      
+      // For diamonds, only show edge anchors (no corners)
+      // Edge anchors (positioned one grid cell outside the shape)
+      drawAnchor(bounds.minX - 1, midY) // Left
+      drawAnchor(bounds.maxX + 1, midY) // Right
+      drawAnchor(midX, bounds.minY - 1) // Top
+      drawAnchor(midX, bounds.maxY + 1) // Bottom
     } else if (shape.type === 'line') {
       // For lines, show anchors at start and end points
       if (bounds.minX === bounds.maxX) {
@@ -138,6 +165,12 @@ export function useSelection() {
         drawAnchor(bounds.minX - 1, bounds.minY - 1) // Start point
         drawAnchor(bounds.maxX + 1, bounds.maxY + 1) // End point
       }
+    } else if (shape.type === 'image') {
+      // For images, only show corner anchors
+      drawAnchor(bounds.minX - 1, bounds.minY - 1) // Top left
+      drawAnchor(bounds.maxX + 1, bounds.minY - 1) // Top right
+      drawAnchor(bounds.minX - 1, bounds.maxY + 1) // Bottom left
+      drawAnchor(bounds.maxX + 1, bounds.maxY + 1) // Bottom right
     }
   }
 
@@ -168,22 +201,48 @@ export function useSelection() {
 
     // Draw highlight around each character in all selected shapes
     for (const selectedShape of shapes) {
-      for (let gridX = startGridX; gridX <= endGridX; gridX++) {
-        for (let gridY = startGridY; gridY <= endGridY; gridY++) {
-          const key = gridKey(gridX, gridY)
-          const character = selectedShape.data.get(key)
-          
-          if (character && character !== '') {
-            const worldPos = gridToWorld(gridX, gridY)
-            const halfWidth = gridWidth / 2
-            const halfHeight = gridHeight / 2
+      // For shapes with only invisible placeholders, draw outline around bounds
+      const bounds = getShapeBounds(selectedShape)
+      let hasVisibleContent = false
+      
+      // Check if shape has any visible content
+      for (const [key, char] of selectedShape.data) {
+        if (char && char !== '' && char !== '▓') {
+          hasVisibleContent = true
+          break
+        }
+      }
+      
+      if (!hasVisibleContent && bounds.minX !== Infinity) {
+        // Draw outline around the entire shape bounds for invisible shapes
+        const topLeft = gridToWorld(bounds.minX, bounds.minY)
+        const bottomRight = gridToWorld(bounds.maxX + 1, bounds.maxY + 1)
+        
+        ctx.strokeRect(
+          topLeft.x - gridWidth / 2,
+          topLeft.y - gridHeight / 2,
+          bottomRight.x - topLeft.x,
+          bottomRight.y - topLeft.y
+        )
+      } else {
+        // Draw highlight around each visible character
+        for (let gridX = startGridX; gridX <= endGridX; gridX++) {
+          for (let gridY = startGridY; gridY <= endGridY; gridY++) {
+            const key = gridKey(gridX, gridY)
+            const character = selectedShape.data.get(key)
             
-            ctx.strokeRect(
-              worldPos.x - halfWidth,
-              worldPos.y - halfHeight,
-              gridWidth,
-              gridHeight
-            )
+            if (character && character !== '' && character !== '▓') {
+              const worldPos = gridToWorld(gridX, gridY)
+              const halfWidth = gridWidth / 2
+              const halfHeight = gridHeight / 2
+              
+              ctx.strokeRect(
+                worldPos.x - halfWidth,
+                worldPos.y - halfHeight,
+                gridWidth,
+                gridHeight
+              )
+            }
           }
         }
       }
@@ -192,9 +251,9 @@ export function useSelection() {
     ctx.globalAlpha = 1 // Reset alpha
     
     // Draw resize anchors only if single shape is selected
-    const primaryShape = layersStore.getSelectedShape()
+    const primaryShape = shapesStore.getSelectedShape()
     if (toolStore.currentTool === 'select' && shapes.length === 1 && primaryShape && 
-        (primaryShape.type === 'rectangle' || primaryShape.type === 'line' || primaryShape.type === 'text')) {
+        (primaryShape.type === 'rectangle' || primaryShape.type === 'line' || primaryShape.type === 'text' || primaryShape.type === 'diamond')) {
       drawResizeAnchors(ctx, primaryShape, camera)
     }
   }
@@ -207,8 +266,20 @@ export function useSelection() {
     for (let i = shapes.length - 1; i >= 0; i--) {
       const shape = shapes[i]
       const character = shape.data.get(key)
-      if (character && character !== '') {
-        return shape
+      // Check for any character including empty strings (invisible placeholders)
+      // but not shadow characters
+      if (character !== undefined && character !== null && character !== '▓') {
+        // For shapes with only invisible placeholders, check if click is within bounds
+        if (character === '') {
+          const bounds = getShapeBounds(shape)
+          if (gridX >= bounds.minX && gridX <= bounds.maxX && 
+              gridY >= bounds.minY && gridY <= bounds.maxY) {
+            return shape
+          }
+        } else {
+          // Regular visible character - select directly
+          return shape
+        }
       }
     }
     
@@ -218,9 +289,9 @@ export function useSelection() {
   // Handle multi-select logic (shift-click)
   const handleShapeSelection = (shape: Shape | null, isMultiSelect: boolean) => {
     if (shape) {
-      layersStore.selectShape(shape.id, isMultiSelect)
+      shapesStore.selectShape(shape.id)
     } else if (!isMultiSelect) {
-      layersStore.selectShape(null) // Deselect if clicking empty area (only if not multi-selecting)
+      shapesStore.clearSelection() // Deselect if clicking empty area (only if not multi-selecting)
     }
   }
 

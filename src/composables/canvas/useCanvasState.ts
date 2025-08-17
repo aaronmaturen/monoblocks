@@ -1,4 +1,5 @@
 import { ref, reactive } from 'vue'
+import { useShapesStore } from '@/stores/shapes'
 
 export interface Camera {
   x: number
@@ -15,6 +16,8 @@ export interface Mouse {
 }
 
 export function useCanvasState() {
+  const shapesStore = useShapesStore()
+  
   // Canvas ref
   const canvasRef = ref<HTMLCanvasElement>()
 
@@ -70,10 +73,8 @@ export function useCanvasState() {
     camera.y = 0
     camera.zoom = 1
     saveCameraState()
-    // Trigger a render if the global render function exists
-    if (window.renderCanvas) {
-      window.renderCanvas()
-    }
+    // Trigger a render via the event system
+    shapesStore.emit({ type: 'render:required' })
   }
 
   // Pan functions

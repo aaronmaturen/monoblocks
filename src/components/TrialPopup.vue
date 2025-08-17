@@ -62,7 +62,7 @@
 
           <div class="pricing">
             <i class="fa-thumbprint fa-light fa-credit-card"></i>
-            <strong>Registration fee:</strong> $49,999.99 per seat/year
+            <strong>Registration fee:</strong> $49.99 per seat/year
             <p class="fine-print">
               (plus onboarding, implementation, and a 600-page PDF manual you won't read)
             </p>

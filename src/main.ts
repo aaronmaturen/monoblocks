@@ -8,6 +8,10 @@ import '@awesome.me/kit-8b9cf084d8/icons/css/all.min.css'
 
 import App from './App.vue'
 
+// Register shape definitions
+import { registerAllShapes } from '@/shapes'
+registerAllShapes()
+
 const app = createApp(App)
 
 app.use(createPinia())

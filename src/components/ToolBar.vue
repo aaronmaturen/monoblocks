@@ -9,11 +9,12 @@ const appStore = useAppStore()
 
 const tools: Array<{ id: Tool; label: string }> = [
   { id: 'pan', label: 'Pan' },
+  { id: 'select', label: 'Select' },
   { id: 'brush', label: 'Brush' },
   { id: 'rectangle', label: 'Rectangle' },
+  { id: 'diamond', label: 'Diamond' },
   { id: 'line', label: 'Line' },
   { id: 'text', label: 'Text' },
-  { id: 'select', label: 'Select' },
   { id: 'eraser', label: 'Eraser' },
 ]
 
@@ -48,6 +49,7 @@ const selectTool = (toolId: Tool) => {
     emit('recenter')
     return // Don't change tool
   } else if (toolId === 'reset') {
+    console.log('[ToolBar] Reset button clicked, emitting reset event')
     emit('reset')
     return // Don't change tool
   }
@@ -114,6 +116,9 @@ const selectTool = (toolId: Tool) => {
         <!-- Rectangle Icon -->
         <i v-if="tool.id === 'rectangle'" class="fa-thumbprint fa-light fa-rectangle"></i>
 
+        <!-- Diamond Icon -->
+        <i v-if="tool.id === 'diamond'" class="fa-duotone fa-solid fa-rhombus"></i>
+
         <!-- Line Icon -->
         <i v-if="tool.id === 'line'" class="fa-thumbprint fa-light fa-arrow-right"></i>
 
@@ -125,36 +130,38 @@ const selectTool = (toolId: Tool) => {
 
         <!-- Eraser Icon -->
         <i v-if="tool.id === 'eraser'" class="fa-thumbprint fa-light fa-wand-magic-sparkles"></i>
-
-
       </button>
 
       <!-- Separator -->
       <div class="separator"></div>
-      
+
       <!-- Copy Button -->
       <button class="tool-button" @click="emit('copy')" title="Copy to Clipboard">
         <i class="fa-thumbprint fa-light fa-clone"></i>
       </button>
-      
+
       <!-- Share Button -->
       <button class="tool-button" @click="emit('share')" title="Share Link">
         <i class="fa-thumbprint fa-light fa-share-nodes"></i>
       </button>
-      
+
       <!-- Export Button -->
       <button class="tool-button" @click="emit('export')" title="Export to PNG">
         <i class="fa-thumbprint fa-light fa-arrow-down-to-line"></i>
       </button>
-      
+
       <!-- Separator -->
       <div class="separator"></div>
-      
+
       <!-- Dark Mode Toggle -->
-      <button class="tool-button" @click="appStore.toggleDarkMode()" :title="appStore.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+      <button
+        class="tool-button"
+        @click="appStore.toggleDarkMode()"
+        :title="appStore.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
+      >
         <i class="fa-thumbprint fa-light fa-circle-half-stroke"></i>
       </button>
-      
+
       <!-- About Button -->
       <button class="tool-button" @click="emit('about')" title="About MonoBlocks Professional">
         <i class="fa-thumbprint fa-light fa-question"></i>
@@ -236,6 +243,9 @@ const selectTool = (toolId: Tool) => {
 .tool-button:has(.fa-rectangle) i {
   color: var(--icon-rectangle);
 }
+.tool-button:has(.fa-diamond) i {
+  color: var(--icon-diamond);
+}
 .tool-button:has(.fa-arrow-right) i {
   color: var(--icon-line);
 }
@@ -247,7 +257,6 @@ const selectTool = (toolId: Tool) => {
 .tool-button:has(.fa-wand-magic-sparkles) i {
   color: var(--icon-eraser);
 }
-
 
 /* Utility Icons */
 .tool-button:has(.fa-grid) i {

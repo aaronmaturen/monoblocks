@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useLayersStore } from '../stores/layers'
+import { useShapesStore } from '../stores/shapes'
 import { useToolStore } from '../stores/tools'
-import type { Shape, Group } from '../stores/layers'
+import type { Shape, ShapeGroup } from '../stores/shapes'
 
 const emit = defineEmits<{
   shapesChanged: []
 }>()
 
-const layersStore = useLayersStore()
+const shapesStore = useShapesStore()
 const toolStore = useToolStore()
 
 // UI state
@@ -25,22 +25,22 @@ const lastSelectedShapeId = ref<string | null>(null)
 
 // Check if we can group/ungroup
 const canGroup = computed(() => {
-  return layersStore.selectedShapeIds.size >= 2
+  return shapesStore.selectedShapeIds.size >= 2
 })
 
 const canUngroup = computed(() => {
-  if (layersStore.selectedShapeIds.size !== 1) return false
-  const selectedId = Array.from(layersStore.selectedShapeIds)[0]
-  const shape = layersStore.shapes.find((s) => s.id === selectedId)
+  if (shapesStore.selectedShapeIds.size !== 1) return false
+  const selectedId = Array.from(shapesStore.selectedShapeIds)[0]
+  const shape = shapesStore.getShape(selectedId)
   return shape?.groupId !== undefined
 })
 
 const selectedGroup = computed(() => {
-  if (layersStore.selectedShapeIds.size !== 1) return null
-  const selectedId = Array.from(layersStore.selectedShapeIds)[0]
-  const shape = layersStore.shapes.find((s) => s.id === selectedId)
+  if (shapesStore.selectedShapeIds.size !== 1) return null
+  const selectedId = Array.from(shapesStore.selectedShapeIds)[0]
+  const shape = shapesStore.getShape(selectedId)
   if (!shape?.groupId) return null
-  return layersStore.groups.find((g) => g.id === shape.groupId)
+  return shapesStore.groups.find((g) => g.id === shape.groupId)
 })
 
 // Group management
@@ -51,11 +51,7 @@ const startEditingGroup = (groupId: string, currentName: string) => {
 
 const saveGroupName = (groupId: string) => {
   if (editingGroupName.value.trim()) {
-    const group = layersStore.groups.find((g) => g.id === groupId)
-    if (group) {
-      group.name = editingGroupName.value.trim()
-      layersStore.saveToStorage()
-    }
+    shapesStore.updateGroup(groupId, { name: editingGroupName.value.trim() })
   }
   editingGroupId.value = null
   editingGroupName.value = ''
@@ -77,14 +73,15 @@ const handleKeydown = (e: KeyboardEvent, groupId: string) => {
 // Group actions
 const createGroup = () => {
   if (canGroup.value) {
-    layersStore.groupShapes()
+    const selectedIds = Array.from(shapesStore.selectedShapeIds)
+    shapesStore.createGroup('New Group', selectedIds)
     emit('shapesChanged')
   }
 }
 
 const ungroupSelected = () => {
   if (selectedGroup.value) {
-    layersStore.ungroupShapes(selectedGroup.value.id)
+    shapesStore.removeGroup(selectedGroup.value.id)
     emit('shapesChanged')
   }
 }
@@ -92,11 +89,11 @@ const ungroupSelected = () => {
 const toggleGroupExpanded = (groupId: string) => {
   if (expandedGroups.value.has(groupId)) {
     expandedGroups.value.delete(groupId)
+    shapesStore.updateGroup(groupId, { expanded: false })
   } else {
     expandedGroups.value.add(groupId)
+    shapesStore.updateGroup(groupId, { expanded: true })
   }
-  // Also update in store for persistence
-  layersStore.toggleGroupExpanded(groupId)
 }
 
 const isGroupExpanded = (groupId: string) => {
@@ -113,7 +110,15 @@ const selectShape = (shapeId: string, event?: MouseEvent) => {
     selectShapeRange(lastSelectedShapeId.value, shapeId)
   } else {
     // Single or toggle selection
-    layersStore.selectShape(shapeId, isMultiSelect)
+    if (isMultiSelect) {
+      if (shapesStore.isShapeSelected(shapeId)) {
+        shapesStore.deselectShape(shapeId)
+      } else {
+        shapesStore.selectShape(shapeId, true)
+      }
+    } else {
+      shapesStore.selectShape(shapeId, false)
+    }
     lastSelectedShapeId.value = shapeId
   }
 
@@ -123,24 +128,10 @@ const selectShape = (shapeId: string, event?: MouseEvent) => {
 }
 
 const selectShapeRange = (fromId: string, toId: string) => {
-  // Find all shapes in display order
-  const allShapes: string[] = []
-
-  // Add ungrouped shapes
-  layersStore
-    .getUngroupedShapes()
-    .sort((a, b) => a.order - b.order)
-    .forEach((shape) => allShapes.push(shape.id))
-
-  // Add grouped shapes
-  layersStore.groups
-    .sort((a, b) => a.order - b.order)
-    .forEach((group) => {
-      layersStore
-        .getShapesInGroup(group.id)
-        .sort((a, b) => a.order - b.order)
-        .forEach((shape) => allShapes.push(shape.id))
-    })
+  // Find all shapes in display order (by z-order)
+  const allShapes = shapesStore.getAllShapes()
+    .sort((a, b) => a.zOrder - b.zOrder)
+    .map(s => s.id)
 
   // Find indices
   const fromIndex = allShapes.findIndex((id) => id === fromId)
@@ -149,13 +140,13 @@ const selectShapeRange = (fromId: string, toId: string) => {
   if (fromIndex === -1 || toIndex === -1) return
 
   // Clear current selection and select range
-  layersStore.clearSelection()
+  shapesStore.clearSelection()
 
   const startIndex = Math.min(fromIndex, toIndex)
   const endIndex = Math.max(fromIndex, toIndex)
 
   for (let i = startIndex; i <= endIndex; i++) {
-    layersStore.selectShape(allShapes[i], true)
+    shapesStore.selectShape(allShapes[i], true)
   }
 
   lastSelectedShapeId.value = toId
@@ -163,33 +154,21 @@ const selectShapeRange = (fromId: string, toId: string) => {
 
 // Toggle shape visibility
 const toggleShapeVisibility = (shapeId: string) => {
-  const shape = layersStore.shapes.find((s) => s.id === shapeId)
+  const shape = shapesStore.getShape(shapeId)
   if (shape) {
-    shape.visible = !shape.visible
-    layersStore.saveToStorage()
+    shapesStore.updateShape(shapeId, { visible: !shape.visible })
     emit('shapesChanged')
   }
 }
 
 // Shape actions
 const deleteShape = (shapeId: string) => {
-  // Find which layer contains this shape (if any)
-  const layer = layersStore.layers.find(l => l.shapes.some(s => s.id === shapeId))
-  if (layer) {
-    layersStore.deleteShape(layer.id, shapeId)
-  } else {
-    // Fallback: delete directly from shapes array if not in any layer
-    const index = layersStore.shapes.findIndex((s) => s.id === shapeId)
-    if (index !== -1) {
-      layersStore.shapes.splice(index, 1)
-      layersStore.saveToStorage()
-    }
-  }
+  shapesStore.removeShape(shapeId)
   emit('shapesChanged')
 }
 
 const deleteGroup = (groupId: string) => {
-  layersStore.deleteGroup(groupId)
+  shapesStore.removeGroup(groupId)
   emit('shapesChanged')
 }
 
@@ -239,72 +218,55 @@ const handleDrop = (e: DragEvent, targetType: 'shape' | 'group', targetId: strin
     return
   }
   
-  // Calculate new order based on target position and drop position
-  let newOrder: number
-  
-  if (targetType === 'group') {
-    const targetGroup = layersStore.groups.find(g => g.id === targetId)
-    if (targetGroup) {
-      newOrder = position === 'before' ? targetGroup.order - 0.5 : targetGroup.order + 0.5
-    } else {
-      newOrder = 0
-    }
-  } else {
-    const targetShape = layersStore.shapes.find(s => s.id === targetId)
-    if (targetShape) {
-      newOrder = position === 'before' ? (targetShape.order || 0) - 0.5 : (targetShape.order || 0) + 0.5
-    } else {
-      newOrder = 0
+  // Handle reordering logic
+  if (sourceType === 'shape' && targetType === 'shape') {
+    const sourceShape = shapesStore.getShape(sourceId)
+    const targetShape = shapesStore.getShape(targetId)
+    
+    if (sourceShape && targetShape && sourceShape.id !== targetShape.id) {
+      // Get all shapes sorted by zOrder DESCENDING (matching the display order)
+      const allShapes = shapesStore.getAllShapes().sort((a, b) => b.zOrder - a.zOrder)
+      
+      // Find positions in the displayed order
+      const sourceIndex = allShapes.findIndex(s => s.id === sourceId)
+      const targetIndex = allShapes.findIndex(s => s.id === targetId)
+      
+      if (sourceIndex !== -1 && targetIndex !== -1) {
+        // Remove source from array
+        const [movedShape] = allShapes.splice(sourceIndex, 1)
+        
+        // Calculate new insert position after removal
+        let insertIndex = targetIndex
+        
+        if (position === 'before') {
+          // Insert before target (higher in the list, higher zOrder)
+          // If source was before target (higher in list), target has shifted up by 1
+          insertIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
+        } else {
+          // position === 'after'
+          // Insert after target (lower in the list, lower zOrder)
+          // If source was before target (higher in list), target has shifted up by 1
+          insertIndex = sourceIndex < targetIndex ? targetIndex : targetIndex + 1
+        }
+        
+        // Insert at new position
+        allShapes.splice(insertIndex, 0, movedShape)
+        
+        // Update zOrder for all shapes - highest zOrder for first item
+        allShapes.forEach((shape, index) => {
+          const newZOrder = allShapes.length - index
+          if (shape.zOrder !== newZOrder) {
+            shapesStore.updateShape(shape.id, { zOrder: newZOrder })
+          }
+        })
+      }
     }
   }
   
-  // Update order based on source type
-  if (sourceType === 'group') {
-    const sourceGroup = layersStore.groups.find(g => g.id === sourceId)
-    if (sourceGroup) {
-      sourceGroup.order = newOrder
-    }
-  } else {
-    const sourceShape = layersStore.shapes.find(s => s.id === sourceId)
-    if (sourceShape) {
-      sourceShape.order = newOrder
-    }
-  }
-  
-  // Normalize orders to prevent floating point accumulation
-  normalizeOrders()
-  
-  layersStore.saveToStorage()
   emit('shapesChanged')
   
   draggedItem.value = null
   dropPosition.value = null
-}
-
-const normalizeOrders = () => {
-  // Normalize group orders
-  const sortedGroups = [...layersStore.groups].sort((a, b) => a.order - b.order)
-  sortedGroups.forEach((group, index) => {
-    group.order = index
-  })
-  
-  // Normalize shape orders within each group and ungrouped
-  const groupedShapes = new Map<string | undefined, Shape[]>()
-  
-  layersStore.shapes.forEach(shape => {
-    const groupId = shape.groupId
-    if (!groupedShapes.has(groupId)) {
-      groupedShapes.set(groupId, [])
-    }
-    groupedShapes.get(groupId)!.push(shape)
-  })
-  
-  groupedShapes.forEach(shapes => {
-    const sorted = shapes.sort((a, b) => (a.order || 0) - (b.order || 0))
-    sorted.forEach((shape, index) => {
-      shape.order = index
-    })
-  })
 }
 
 // Utility functions
@@ -327,20 +289,9 @@ const formatShapeType = (type: string) => {
   return type.charAt(0).toUpperCase() + type.slice(1)
 }
 
-const getShapePreview = (shape: Shape) => {
-  if (!shape.data || shape.data.size === 0) return '○'
 
-  const characters = Array.from(shape.data.values())
-    .filter((char) => char && char.trim())
-    .slice(0, 3)
-
-  if (characters.length === 0) return '○'
-  if (characters.length === 1) return characters[0]
-  return `${characters[0]}...`
-}
-
-// Initialize expanded groups
-layersStore.groups.forEach((group) => {
+// Initialize expanded groups from store
+shapesStore.groups.forEach((group) => {
   if (group.expanded) {
     expandedGroups.value.add(group.id)
   }
@@ -373,15 +324,14 @@ layersStore.groups.forEach((group) => {
 
     <div class="shapes-list">
       <!-- Ungrouped shapes -->
-      <div v-if="layersStore.getUngroupedShapes().length > 0" class="ungrouped-section">
+      <div v-if="shapesStore.getUngroupedShapes().length > 0" class="ungrouped-section">
         <div
-          v-for="shape in layersStore.getUngroupedShapes().sort((a, b) => b.order - a.order)"
+          v-for="shape in shapesStore.getUngroupedShapes().sort((a, b) => b.zOrder - a.zOrder)"
           :key="shape.id"
           :class="[
             'shape-item',
             {
-              selected: layersStore.isShapeSelected(shape.id),
-              'primary-selected': layersStore.selectedShapeId === shape.id,
+              selected: shapesStore.isShapeSelected(shape.id),
               'drop-before': dropPosition?.type === 'shape' && dropPosition?.id === shape.id && dropPosition?.position === 'before',
               'drop-after': dropPosition?.type === 'shape' && dropPosition?.id === shape.id && dropPosition?.position === 'after',
             },
@@ -393,9 +343,6 @@ layersStore.groups.forEach((group) => {
           @dragleave="handleDragLeave($event)"
           @drop="handleDrop($event, 'shape', shape.id)"
         >
-          <div class="shape-preview" :style="{ color: shape.color }">
-            {{ getShapePreview(shape) }}
-          </div>
           <div class="shape-info">
             <div class="shape-name">{{ shape.name }}</div>
             <div class="shape-details">
@@ -424,7 +371,7 @@ layersStore.groups.forEach((group) => {
 
       <!-- Groups -->
       <div
-        v-for="group in layersStore.groups.sort((a, b) => b.order - a.order)"
+        v-for="group in [...shapesStore.groups].sort((a: any, b: any) => b.order - a.order)"
         :key="group.id"
         :class="[
           'group-container',
@@ -469,11 +416,11 @@ layersStore.groups.forEach((group) => {
             autofocus
           />
 
-          <div class="group-count">{{ layersStore.getShapesInGroup(group.id).length }} shapes</div>
+          <div class="group-count">{{ shapesStore.getShapesInGroup(group.id).length }} shapes</div>
 
           <div class="group-actions">
             <button
-              @click.stop="layersStore.toggleGroupVisibility(group.id)"
+              @click.stop="shapesStore.updateGroup(group.id, { visible: !group.visible })"
               class="visibility-button"
               :class="{ hidden: !group.visible }"
             >
@@ -492,16 +439,15 @@ layersStore.groups.forEach((group) => {
         <!-- Shapes in group -->
         <div v-if="isGroupExpanded(group.id)" class="group-shapes">
           <div
-            v-for="shape in layersStore
+            v-for="shape in shapesStore
               .getShapesInGroup(group.id)
-              .sort((a, b) => b.order - a.order)"
+              .sort((a, b) => b.zOrder - a.zOrder)"
             :key="shape.id"
             :class="[
               'shape-item',
               'grouped',
               {
-                selected: layersStore.isShapeSelected(shape.id),
-                'primary-selected': layersStore.selectedShapeId === shape.id,
+                selected: shapesStore.isShapeSelected(shape.id),
                 'drop-before': dropPosition?.type === 'shape' && dropPosition?.id === shape.id && dropPosition?.position === 'before',
                 'drop-after': dropPosition?.type === 'shape' && dropPosition?.id === shape.id && dropPosition?.position === 'after',
               },
@@ -513,9 +459,6 @@ layersStore.groups.forEach((group) => {
             @dragleave="handleDragLeave($event)"
             @drop="handleDrop($event, 'shape', shape.id)"
           >
-            <div class="shape-preview" :style="{ color: shape.color }">
-              {{ getShapePreview(shape) }}
-            </div>
             <div class="shape-info">
               <div class="shape-name">{{ shape.name }}</div>
               <div class="shape-details">
@@ -697,17 +640,6 @@ layersStore.groups.forEach((group) => {
 
 .shape-item.primary-selected:hover {
   background: rgba(79, 195, 247, 0.25);
-}
-
-.shape-preview {
-  width: 20px;
-  height: 16px;
-  margin-right: 12px;
-  font-family: monospace;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .shape-info {

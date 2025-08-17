@@ -23,6 +23,14 @@ export function useDrawingTools() {
     isDrawing: false
   })
 
+  const diamondState = reactive<DrawingToolState>({
+    startX: 0,
+    startY: 0,
+    endX: 0,
+    endY: 0,
+    isDrawing: false
+  })
+
   const lineState = reactive<DrawingToolState>({
     startX: 0,
     startY: 0,
@@ -41,27 +49,60 @@ export function useDrawingTools() {
 
   // Current stroke data for brush/eraser operations
   const currentStrokeData = new Map<string, string>()
+  
+  // Track last brush position for interpolation
+  let lastBrushPosition: { x: number, y: number } | null = null
 
   // Place character at world position (for current stroke)
   const placeCharacter = (worldX: number, worldY: number, character: string) => {
     const grid = worldToGrid(worldX, worldY)
-    const key = gridKey(grid.x, grid.y)
-    currentStrokeData.set(key, character)
+    
+    // If we have a previous position, interpolate between positions
+    if (lastBrushPosition) {
+      const dx = grid.x - lastBrushPosition.x
+      const dy = grid.y - lastBrushPosition.y
+      const distance = Math.max(Math.abs(dx), Math.abs(dy))
+      
+      // Fill in all blocks along the path
+      if (distance > 0) {
+        for (let i = 0; i <= distance; i++) {
+          const progress = i / distance
+          const x = Math.round(lastBrushPosition.x + dx * progress)
+          const y = Math.round(lastBrushPosition.y + dy * progress)
+          const key = gridKey(x, y)
+          currentStrokeData.set(key, character)
+        }
+      } else {
+        // No movement, just place at current position
+        const key = gridKey(grid.x, grid.y)
+        currentStrokeData.set(key, character)
+      }
+    } else {
+      // First position, just place character
+      const key = gridKey(grid.x, grid.y)
+      currentStrokeData.set(key, character)
+    }
+    
+    // Update last position
+    lastBrushPosition = { x: grid.x, y: grid.y }
+  }
+  
+  // Reset brush tracking when stroke ends
+  const resetBrushTracking = () => {
+    lastBrushPosition = null
   }
 
   // Erase character at world position by modifying existing shapes
-  const eraseAtPosition = (worldX: number, worldY: number, layers: any[]) => {
+  const eraseAtPosition = (worldX: number, worldY: number, shapes: any[]) => {
     const grid = worldToGrid(worldX, worldY)
     const key = gridKey(grid.x, grid.y)
     
-    // Go through all layers and remove this position from any shapes
-    for (const layer of layers) {
-      if (!layer.visible) continue
+    // Go through all shapes and remove this position
+    for (const shape of shapes) {
+      if (shape.visible === false) continue
       
-      for (const shape of layer.shapes) {
-        if (shape.data.has(key)) {
-          shape.data.delete(key) // Remove the character at this position
-        }
+      if (shape.data && shape.data.has && shape.data.has(key)) {
+        shape.data.delete(key) // Remove the character at this position
       }
     }
   }
@@ -90,7 +131,9 @@ export function useDrawingTools() {
     const showText = customSettings?.showText !== undefined ? customSettings.showText : toolStore.rectangleShowText
     const showFill = customSettings?.showFill !== undefined ? customSettings.showFill : toolStore.rectangleShowFill
     const showBorder = customSettings?.showBorder !== undefined ? customSettings.showBorder : toolStore.rectangleShowBorder
-    const showShadow = customSettings?.showShadow !== undefined ? customSettings.showShadow : (shadow || toolStore.rectangleShowShadow)
+    // Shadow requires BOTH the section checkbox (showShadow) AND the shadow toggle to be true
+    const showShadow = (customSettings?.showShadow !== undefined ? customSettings.showShadow : toolStore.rectangleShowShadow) && 
+                       (customSettings?.shadow !== undefined ? customSettings.shadow : toolStore.rectangleShadow)
     
     if (!borderStyle) {
       return rectangleData // Return empty if no style found
@@ -220,6 +263,163 @@ export function useDrawingTools() {
     return rectangleData
   }
 
+  // Draw diamond shape from start to end coordinates (world space)
+  const drawDiamond = (startWorldX: number, startWorldY: number, endWorldX: number, endWorldY: number, customSettings?: any): Map<string, string> => {
+    const startGrid = worldToGrid(startWorldX, startWorldY)
+    const endGrid = worldToGrid(endWorldX, endWorldY)
+    
+    // Ensure we have proper min/max coordinates
+    const minX = Math.min(startGrid.x, endGrid.x)
+    const maxX = Math.max(startGrid.x, endGrid.x)
+    const minY = Math.min(startGrid.y, endGrid.y)
+    const maxY = Math.max(startGrid.y, endGrid.y)
+    
+    const diamondData = new Map<string, string>()
+    
+    // Get diamond settings (use custom settings if provided, otherwise fall back to tool store)
+    const fillChar = customSettings?.fillChar !== undefined ? customSettings.fillChar : (toolStore.diamondFillChar || '')
+    const shadow = customSettings?.shadow !== undefined ? customSettings.shadow : (toolStore.diamondShadow || false)
+    const text = customSettings?.text !== undefined ? customSettings.text : (toolStore.diamondText || '')
+    
+    // Check if features are enabled (use custom settings if provided, otherwise fall back to tool store)
+    const showText = customSettings?.showText !== undefined ? customSettings.showText : toolStore.diamondShowText
+    const showFill = customSettings?.showFill !== undefined ? customSettings.showFill : toolStore.diamondShowFill
+    const showBorder = customSettings?.showBorder !== undefined ? customSettings.showBorder : toolStore.diamondShowBorder
+    // Shadow requires BOTH the section checkbox (showShadow) AND the shadow toggle to be true
+    const showShadow = (customSettings?.showShadow !== undefined ? customSettings.showShadow : toolStore.diamondShowShadow) && 
+                       (customSettings?.shadow !== undefined ? customSettings.shadow : toolStore.diamondShadow)
+    
+    const width = maxX - minX + 1
+    const height = maxY - minY + 1
+    
+    // Calculate center point - for odd widths, this gives us the true center
+    const centerX = Math.floor((minX + maxX) / 2)
+    const centerY = Math.floor((minY + maxY) / 2)
+    
+    // If it's a single cell, just place a character
+    if (minX === maxX && minY === maxY) {
+      diamondData.set(gridKey(minX, minY), fillChar || '◆')
+      return diamondData
+    }
+    
+    // Draw the diamond shape
+    const halfHeight = Math.floor(height / 2)
+    
+    for (let y = minY; y <= maxY; y++) {
+      const relY = y - minY
+      
+      // Calculate how many characters from center to edge at this row
+      let distFromCenter
+      
+      if (relY <= halfHeight) {
+        // Top half (including middle) - distance increases as we go down
+        distFromCenter = relY
+      } else {
+        // Bottom half - distance decreases as we go down  
+        distFromCenter = height - relY - 1
+      }
+      
+      // Calculate actual x positions for the edges
+      const leftX = centerX - distFromCenter
+      const rightX = centerX + distFromCenter
+      
+      // Draw the diamond edges and fill
+      if (showBorder) {
+        // Draw left edge
+        if (relY <= halfHeight) {
+          diamondData.set(gridKey(leftX, y), '/')
+        } else {
+          diamondData.set(gridKey(leftX, y), '\\')
+        }
+        
+        // Draw right edge (only if not the same as left - for top/bottom points)
+        if (leftX !== rightX) {
+          if (relY <= halfHeight) {
+            diamondData.set(gridKey(rightX, y), '\\')
+          } else {
+            diamondData.set(gridKey(rightX, y), '/')
+          }
+        }
+      }
+      
+      // Fill interior if needed
+      if (showFill && fillChar) {
+        for (let x = leftX + 1; x < rightX; x++) {
+          diamondData.set(gridKey(x, y), fillChar)
+        }
+      }
+    }
+    
+    // Add text if enabled
+    if (showText && text) {
+      const textAlign = customSettings?.textAlign || toolStore.diamondTextAlign || 'center'
+      const textPosition = customSettings?.textPosition || toolStore.diamondTextPosition || 'middle'
+      
+      // Calculate text area (smaller area inside diamond)
+      const textWidth = Math.max(1, Math.floor(width / 2))
+      const textHeight = Math.max(1, Math.floor(height / 2))
+      const textMinX = centerX - Math.floor(textWidth / 2)
+      const textMaxX = centerX + Math.floor(textWidth / 2)
+      const textMinY = centerY - Math.floor(textHeight / 2)
+      const textMaxY = centerY + Math.floor(textHeight / 2)
+      
+      // Simple text placement at center
+      const textLines = text.split('\n')
+      const startY = textPosition === 'middle' ? centerY - Math.floor(textLines.length / 2) :
+                    textPosition === 'bottom' ? textMaxY - textLines.length + 1 : textMinY
+      
+      textLines.forEach((line, i) => {
+        const y = startY + i
+        if (y >= textMinY && y <= textMaxY) {
+          const startX = textAlign === 'center' ? centerX - Math.floor(line.length / 2) :
+                        textAlign === 'right' ? textMaxX - line.length + 1 : textMinX
+          
+          for (let j = 0; j < line.length; j++) {
+            const x = startX + j
+            if (x >= textMinX && x <= textMaxX) {
+              const key = gridKey(x, y)
+              // Only place text where diamond exists
+              if (diamondData.has(key) || (!showBorder && !showFill)) {
+                diamondData.set(key, line[j])
+              }
+            }
+          }
+        }
+      })
+    }
+    
+    // Add shadow if enabled
+    if (showShadow) {
+      for (let y = minY + 1; y <= maxY + 1; y++) {
+        for (let x = minX + 1; x <= maxX + 1; x++) {
+          // Calculate if this position would be in shadow
+          const shadowRelX = Math.abs(x - 1 - centerX)
+          const shadowRelY = Math.abs(y - 1 - centerY)
+          const xRadius = width / 2
+          const yRadius = height / 2
+          const shadowNormalizedDist = (shadowRelX / xRadius) + (shadowRelY / yRadius)
+          
+          if (shadowNormalizedDist <= 1.0 && !diamondData.has(gridKey(x, y))) {
+            // Only add shadow where there's no existing diamond
+            if (x === maxX + 1 || y === maxY + 1) {
+              diamondData.set(gridKey(x, y), '▓') // Shadow character
+            }
+          }
+        }
+      }
+    }
+    
+    // If nothing is visible, add invisible placeholder data at corners
+    if (diamondData.size === 0) {
+      diamondData.set(gridKey(minX, minY), '')  // Top corner
+      diamondData.set(gridKey(maxX, minY), '')  // Right corner
+      diamondData.set(gridKey(minX, maxY), '')  // Bottom corner
+      diamondData.set(gridKey(maxX, maxY), '')  // Left corner
+    }
+    
+    return diamondData
+  }
+
   // Draw text within bounds with word wrapping and alignment
   const drawText = (startWorldX: number, startWorldY: number, endWorldX: number, endWorldY: number, text: string, hAlign: string = 'left', vAlign: string = 'top', showBorder: boolean = true): Map<string, string> => {
     const startGrid = worldToGrid(startWorldX, startWorldY)
@@ -341,13 +541,15 @@ export function useDrawingTools() {
   }
   
   // Draw line from start to end coordinates (world space)
-  const drawLine = (startWorldX: number, startWorldY: number, endWorldX: number, endWorldY: number): Map<string, string> => {
+  const drawLine = (startWorldX: number, startWorldY: number, endWorldX: number, endWorldY: number, customSettings?: any): Map<string, string> => {
     const startGrid = worldToGrid(startWorldX, startWorldY)
     const endGrid = worldToGrid(endWorldX, endWorldY)
     
     const lineData = new Map<string, string>()
-    const lineStyleKey = toolStore.lineStyle || 'single'
-    const lineStyle = LINE_STYLES[lineStyleKey]
+    
+    // Get line style settings (use custom settings if provided, otherwise fall back to tool store)
+    const lineStyleKey = customSettings?.lineStyle || toolStore.lineStyle || 'single'
+    const lineStyle = LINE_STYLES[lineStyleKey as keyof typeof LINE_STYLES]
     
     if (!lineStyle) {
       return lineData // Return empty if no style found
@@ -365,10 +567,9 @@ export function useDrawingTools() {
       return lineData
     }
     
-    // Determine if line is horizontal, vertical, or diagonal
-    const isHorizontal = Math.abs(dy) === 0
-    const isVertical = Math.abs(dx) === 0
-    const isDiagonal = Math.abs(dx) === Math.abs(dy)
+    // Calculate angle to determine the best character to use
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI)
+    const absAngle = Math.abs(angle)
     
     // Draw the line segments
     for (let i = 0; i <= distance; i++) {
@@ -376,35 +577,45 @@ export function useDrawingTools() {
       const y = Math.round(startGrid.y + (dy * i) / distance)
       const key = gridKey(x, y)
       
-      let character = lineStyle.horizontal
+      let character = '-' // Default to horizontal
       
-      if (isHorizontal) {
-        character = lineStyle.horizontal
-      } else if (isVertical) {
-        character = lineStyle.vertical
-      } else if (isDiagonal) {
-        // Determine diagonal direction
-        const slopePositive = (dx > 0 && dy > 0) || (dx < 0 && dy < 0)
-        character = slopePositive ? lineStyle.diagonal2 : lineStyle.diagonal1
+      // Select character based on angle
+      // Horizontal: -22.5° to 22.5° or 157.5° to 180° or -180° to -157.5°
+      if ((absAngle <= 22.5) || (absAngle >= 157.5)) {
+        character = lineStyle.horizontal || '-'
+      }
+      // Vertical: 67.5° to 112.5° or -112.5° to -67.5°
+      else if ((absAngle >= 67.5) && (absAngle <= 112.5)) {
+        character = lineStyle.vertical || '|'
+      }
+      // Forward slash: 112.5° to 157.5° or -67.5° to -22.5°
+      // This is for lines going from bottom-left to top-right
+      else if ((angle > 112.5 && angle <= 157.5) || (angle > -67.5 && angle <= -22.5)) {
+        character = lineStyle.diagonal1 || '/'
+      }
+      // Backslash: 22.5° to 67.5° or -157.5° to -112.5°
+      // This is for lines going from top-left to bottom-right
+      else if ((angle >= 22.5 && angle < 67.5) || (angle >= -157.5 && angle < -112.5)) {
+        character = lineStyle.diagonal2 || '\\'
       }
       
       lineData.set(key, character)
     }
     
-    // Add line end styles
-    const startStyle = toolStore.lineStartStyle || 'none'
-    const endStyle = toolStore.lineEndStyle || 'arrow'
+    // Add line end styles (use custom settings if provided, otherwise fall back to tool store)
+    const startStyle = customSettings?.lineStartStyle || toolStore.lineStartStyle || 'none'
+    const endStyle = customSettings?.lineEndStyle || toolStore.lineEndStyle || 'arrow'
     
-    if (startStyle !== 'none' && LINE_END_STYLES[startStyle]) {
+    if (startStyle !== 'none' && LINE_END_STYLES[startStyle as keyof typeof LINE_END_STYLES]) {
       const key = gridKey(startGrid.x, startGrid.y)
-      const styleObj = LINE_END_STYLES[startStyle] as any
+      const styleObj = LINE_END_STYLES[startStyle as keyof typeof LINE_END_STYLES] as any
       const startChar = styleObj.all || styleObj.left || '•'
       lineData.set(key, startChar)
     }
     
-    if (endStyle !== 'none' && LINE_END_STYLES[endStyle]) {
+    if (endStyle !== 'none' && LINE_END_STYLES[endStyle as keyof typeof LINE_END_STYLES]) {
       const key = gridKey(endGrid.x, endGrid.y)
-      const styleObj = LINE_END_STYLES[endStyle] as any
+      const styleObj = LINE_END_STYLES[endStyle as keyof typeof LINE_END_STYLES] as any
       const endChar = styleObj.all || styleObj.right || '→'
       lineData.set(key, endChar)
     }
@@ -415,15 +626,18 @@ export function useDrawingTools() {
   return {
     // Tool states
     rectangleState,
+    diamondState,
     lineState,
     textState,
     currentStrokeData,
     
     // Drawing functions
     drawRectangle,
+    drawDiamond,
     drawLine,
     drawText,
     placeCharacter,
     eraseAtPosition,
+    resetBrushTracking,
   }
 }

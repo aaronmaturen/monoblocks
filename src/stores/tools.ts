@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
-export type Tool = 'pan' | 'brush' | 'text' | 'select' | 'eraser' | 'eyedropper' | 'undo' | 'redo' | 'recenter' | 'rectangle' | 'line' | 'reset'
+export type Tool = 'pan' | 'brush' | 'text' | 'select' | 'eraser' | 'eyedropper' | 'undo' | 'redo' | 'recenter' | 'rectangle' | 'diamond' | 'line' | 'reset'
 
 export type TextHorizontalAlign = 'left' | 'center' | 'right'
 export type TextVerticalAlign = 'top' | 'middle' | 'bottom'
@@ -195,12 +195,29 @@ export const useToolStore = defineStore('tools', () => {
   const rectangleTextAlign = ref<string>('center') // Text alignment in rectangle
   const rectangleTextPosition = ref<string>('middle') // Text position in rectangle
   const rectangleTextColor = ref<string>('#000000') // Text color in rectangle
+  const rectangleBorderColor = ref<string>('#000000') // Border color for rectangle
+  const rectangleFillColor = ref<string>('#000000') // Fill color for rectangle
   
   // Rectangle checkbox states for enabling/disabling features
-  const rectangleShowText = ref(true)
+  const rectangleShowText = ref(false)  // Default to false - text is optional
   const rectangleShowFill = ref(true)
   const rectangleShowBorder = ref(true)
   const rectangleShowShadow = ref(false)
+  
+  // Diamond tool settings
+  const diamondBorderStyle = ref<RectangleBorderStyle>('single')
+  const diamondFillChar = ref<string>('') // Empty string means no fill
+  const diamondShadow = ref(false) // Enable/disable shadow for diamonds
+  const diamondText = ref<string>('') // Text to display inside diamond
+  const diamondTextAlign = ref<string>('center') // Text alignment in diamond
+  const diamondTextPosition = ref<string>('middle') // Text vertical position in diamond
+  const diamondTextColor = ref<string>('#000000') // Text color for diamond
+  const diamondBorderColor = ref<string>('#000000') // Border color for diamond
+  const diamondFillColor = ref<string>('#ffffff') // Fill color for diamond
+  const diamondShowText = ref(false)
+  const diamondShowFill = ref(true)
+  const diamondShowBorder = ref(true)
+  const diamondShowShadow = ref(false)
   
   const lineStyle = ref<LineStyle>('single')
   const lineStartStyle = ref<LineEndStyle>('none')
@@ -267,6 +284,14 @@ export const useToolStore = defineStore('tools', () => {
     rectangleTextColor.value = color
   }
   
+  const setRectangleBorderColor = (color: string) => {
+    rectangleBorderColor.value = color
+  }
+  
+  const setRectangleFillColor = (color: string) => {
+    rectangleFillColor.value = color
+  }
+  
   const setRectangleShowText = (show: boolean) => {
     rectangleShowText.value = show
   }
@@ -281,6 +306,59 @@ export const useToolStore = defineStore('tools', () => {
   
   const setRectangleShowShadow = (show: boolean) => {
     rectangleShowShadow.value = show
+  }
+
+  // Diamond setter functions
+  const setDiamondBorderStyle = (style: RectangleBorderStyle) => {
+    diamondBorderStyle.value = style
+  }
+
+  const setDiamondFillChar = (char: string) => {
+    diamondFillChar.value = char
+  }
+
+  const setDiamondShadow = (enabled: boolean) => {
+    diamondShadow.value = enabled
+  }
+
+  const setDiamondText = (text: string) => {
+    diamondText.value = text
+  }
+
+  const setDiamondTextAlign = (align: string) => {
+    diamondTextAlign.value = align
+  }
+
+  const setDiamondTextPosition = (position: string) => {
+    diamondTextPosition.value = position
+  }
+
+  const setDiamondTextColor = (color: string) => {
+    diamondTextColor.value = color
+  }
+
+  const setDiamondBorderColor = (color: string) => {
+    diamondBorderColor.value = color
+  }
+
+  const setDiamondFillColor = (color: string) => {
+    diamondFillColor.value = color
+  }
+
+  const setDiamondShowText = (show: boolean) => {
+    diamondShowText.value = show
+  }
+
+  const setDiamondShowFill = (show: boolean) => {
+    diamondShowFill.value = show
+  }
+
+  const setDiamondShowBorder = (show: boolean) => {
+    diamondShowBorder.value = show
+  }
+
+  const setDiamondShowShadow = (show: boolean) => {
+    diamondShowShadow.value = show
   }
 
   const setLineStyle = (style: LineStyle) => {
@@ -327,10 +405,25 @@ export const useToolStore = defineStore('tools', () => {
     rectangleTextAlign,
     rectangleTextPosition,
     rectangleTextColor,
+    rectangleBorderColor,
+    rectangleFillColor,
     rectangleShowText,
     rectangleShowFill,
     rectangleShowBorder,
     rectangleShowShadow,
+    diamondBorderStyle,
+    diamondFillChar,
+    diamondShadow,
+    diamondText,
+    diamondTextAlign,
+    diamondTextPosition,
+    diamondTextColor,
+    diamondBorderColor,
+    diamondFillColor,
+    diamondShowText,
+    diamondShowFill,
+    diamondShowBorder,
+    diamondShowShadow,
     lineStyle,
     lineStartStyle,
     lineEndStyle,
@@ -352,10 +445,25 @@ export const useToolStore = defineStore('tools', () => {
     setRectangleTextAlign,
     setRectangleTextPosition,
     setRectangleTextColor,
+    setRectangleBorderColor,
+    setRectangleFillColor,
     setRectangleShowText,
     setRectangleShowFill,
     setRectangleShowBorder,
     setRectangleShowShadow,
+    setDiamondBorderStyle,
+    setDiamondFillChar,
+    setDiamondShadow,
+    setDiamondText,
+    setDiamondTextAlign,
+    setDiamondTextPosition,
+    setDiamondTextColor,
+    setDiamondBorderColor,
+    setDiamondFillColor,
+    setDiamondShowText,
+    setDiamondShowFill,
+    setDiamondShowBorder,
+    setDiamondShowShadow,
     setLineStyle,
     setLineStartStyle,
     setLineEndStyle,

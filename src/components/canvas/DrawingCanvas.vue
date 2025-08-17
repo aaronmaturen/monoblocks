@@ -10,25 +10,23 @@ import { useKeyboardShortcuts } from '../../composables/interaction/useKeyboardS
 import { useSelection } from '../../composables/interaction/useSelection'
 import { useClipboard } from '../../composables/io/useClipboard'
 import { useRenderPipeline } from '../../composables/rendering/useRenderPipeline'
+import { useAutoRender } from '../../composables/rendering/useAutoRender'
 
 // Import stores
 import { useToolStore } from '../../stores/tools'
 import { useHistoryStore } from '../../stores/history'
 import { useColorStore } from '../../stores/colors'
-import { useLayersStore } from '../../stores/layers'
+import { useShapesStore } from '../../stores/shapes'
 import { useToastStore } from '../../stores/toast'
 
-// Component refs and emit
+// Component refs
 const canvasRef = ref<HTMLCanvasElement>()
-const emit = defineEmits<{
-  showTextInput: [screenX: number, screenY: number]
-}>()
 
 // Initialize stores
 const toolStore = useToolStore()
 const historyStore = useHistoryStore()
 const colorStore = useColorStore()
-const layersStore = useLayersStore()
+const shapesStore = useShapesStore()
 const toastStore = useToastStore()
 
 // Initialize canvas state composable
@@ -40,14 +38,17 @@ const { worldToGrid, gridToWorld, gridKey, gridWidth, gridHeight } = useCoordina
 // Initialize drawing tools
 const { 
   rectangleState, 
+  diamondState,
   lineState, 
   textState, 
   currentStrokeData,
   drawRectangle,
+  drawDiamond,
   drawLine,
   drawText,
   placeCharacter,
-  eraseAtPosition
+  eraseAtPosition,
+  resetBrushTracking
 } = useDrawingTools()
 
 // Canvas context
@@ -56,18 +57,29 @@ let ctx: CanvasRenderingContext2D
 // Initialize rendering pipeline
 let renderPipeline: ReturnType<typeof useRenderPipeline>
 
-// Main render function
+// Initialize auto-render system
+const { requestRender, forceRender } = useAutoRender({
+  debounceMs: 16, // ~60fps
+  renderOnMount: true,
+  renderFn: () => {
+    if (!renderPipeline) {
+      console.warn('[DrawingCanvas] Render called but renderPipeline not initialized')
+      return
+    }
+    try {
+      // Convert mouse screen position to world position for brush preview
+      const mouseWorld = screenToWorld(mouse.x, mouse.y)
+      renderPipeline.render(rectangleState, diamondState, lineState, textState, mouseWorld.x, mouseWorld.y, currentStrokeData)
+    } catch (error) {
+      console.error('[DrawingCanvas] Error during render:', error)
+      toastStore.showToast('Render error occurred', 'error')
+    }
+  }
+})
+
+// Main render function (now delegates to auto-render)
 const render = () => {
-  if (!renderPipeline) {
-    console.warn('[DrawingCanvas] Render called but renderPipeline not initialized')
-    return
-  }
-  try {
-    renderPipeline.render(rectangleState, lineState, textState)
-  } catch (error) {
-    console.error('[DrawingCanvas] Error during render:', error)
-    toastStore.showToast('Render error occurred', 'error')
-  }
+  forceRender()
 }
 
 // Initialize clipboard functionality
@@ -78,26 +90,13 @@ const clipboardCallbacks = {
 }
 const { copyToClipboard, setupClipboardListeners } = useClipboard(clipboardCallbacks)
 
-// Text handling functions
-const handleTextConfirm = async (text: string, hAlign: string, vAlign: string, showBorder: boolean) => {
-  if (textState.isDrawing) {
-    const textData = drawText(textState.startX, textState.startY, textState.endX, textState.endY, text, hAlign, vAlign, showBorder)
-    layersStore.addShape('text', textData, colorStore.selectedColor.hex, undefined, {
-      content: text,
-      horizontalAlign: hAlign,
-      verticalAlign: vAlign,
-      showBorder
-    })
-    textState.isDrawing = false
-    layersStore.saveToStorage()
-    render()
-  }
-}
+// Text tool now creates a rectangle with default "TEXT" content
+// The actual creation is handled in useMouseEvents handleMouseUp
 
 // Shape regeneration function for tool changes
 const regenerateShape = (shapeId: string) => {
   // Find the shape in the flat shapes array
-  const targetShape = layersStore.shapes.find(s => s.id === shapeId)
+  const targetShape = shapesStore.getShape(shapeId)
   
   if (!targetShape) return
   
@@ -136,11 +135,43 @@ const regenerateShape = (shapeId: string) => {
       showBorder: targetShape.toolSettings?.showBorder,
       showShadow: targetShape.toolSettings?.showShadow
     })
-    targetShape.data = newData
     
-    // Save and re-render
-    layersStore.saveToStorage()
-    render()
+    // Update the shape data using the store
+    shapesStore.updateShape(shapeId, { data: newData })
+    // Auto-render will handle the re-render
+  } else if (targetShape.type === 'line') {
+    // Find the bounds of the existing line
+    const keys = Array.from(targetShape.data.keys())
+    if (keys.length === 0) return
+    
+    const coords = keys.map(key => {
+      const [x, y] = (key as string).split(',').map(Number)
+      return { x, y }
+    })
+    
+    // Find the start and end points of the line
+    // Lines are drawn from first to last point
+    const minX = Math.min(...coords.map(c => c.x))
+    const maxX = Math.max(...coords.map(c => c.x))
+    const minY = Math.min(...coords.map(c => c.y))
+    const maxY = Math.max(...coords.map(c => c.y))
+    
+    // Convert grid coordinates to world coordinates
+    const startWorldX = minX * 10 + 5
+    const startWorldY = minY * 20 + 10
+    const endWorldX = maxX * 10 + 5
+    const endWorldY = maxY * 20 + 10
+    
+    // Regenerate with shape's tool settings - pass settings directly
+    const newData = drawLine(startWorldX, startWorldY, endWorldX, endWorldY, {
+      lineStyle: targetShape.toolSettings?.lineStyle || 'single',
+      lineStartStyle: targetShape.toolSettings?.lineStartStyle || 'none',
+      lineEndStyle: targetShape.toolSettings?.lineEndStyle || 'arrow'
+    })
+    
+    // Update the shape data using the store
+    shapesStore.updateShape(shapeId, { data: newData })
+    // Auto-render will handle the re-render
   } else if (targetShape.type === 'text' && targetShape.toolSettings?.content) {
     // Find the bounds of the existing text box
     const keys = Array.from(targetShape.data.keys())
@@ -170,38 +201,97 @@ const regenerateShape = (shapeId: string) => {
       targetShape.toolSettings.verticalAlign || 'top',
       targetShape.toolSettings.showBorder !== false
     )
-    targetShape.data = newData
     
-    // Save and re-render
-    layersStore.saveToStorage()
-    render()
+    // Update the shape data using the store
+    shapesStore.updateShape(shapeId, { data: newData })
+    // Auto-render will handle the re-render
   }
-  
-  render()
 }
 
-// Undo/Redo functionality
+// Undo/Redo functionality - TODO: Implement with new store
 const performUndo = () => {
-  const success = layersStore.performUndo()
-  if (success) {
-    render()
-  }
+  // TODO: Implement undo with new shapes store
+  console.log('Undo not yet implemented with new shapes store')
 }
 
 const performRedo = () => {
-  const success = layersStore.performRedo()
-  if (success) {
-    render()
-  }
+  // TODO: Implement redo with new shapes store  
+  console.log('Redo not yet implemented with new shapes store')
 }
 
 // Canvas reset function
 const resetCanvas = () => {
+  console.log('[DrawingCanvas] resetCanvas called')
   if (confirm('Are you sure you want to clear the entire canvas? This cannot be undone.')) {
-    layersStore.resetToDefault()
-    layersStore.saveToStorage()
-    render()
-    toastStore.showToast('Canvas cleared', 'info')
+    console.log('[DrawingCanvas] User confirmed reset')
+    shapesStore.clearAllShapes()
+    
+    // Reset camera to origin with default zoom
+    camera.x = 0
+    camera.y = 0
+    camera.zoom = 1
+    saveCameraState()
+    console.log('[DrawingCanvas] Camera reset to origin (0,0) with zoom 1')
+    
+    // Insert MONOBLOCKS logo as a shape
+    const logoArt = [
+      '███╗   ███╗ ██████╗ ███╗   ██╗ ██████╗ ██████╗ ██╗      ██████╗  ██████╗██╗  ██╗',
+      '████╗ ████║██╔═══██╗████╗  ██║██╔═══██╗██╔══██╗██║     ██╔═══██╗██╔════╝██║ ██╔╝',
+      '██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║██║ ██║ ██║     ██║   ██║██║     █████╔╝ ',
+      '██║╚██╔╝██║██║   ██║██║╚██╗██║██║   ██║██║  ██║██║     ██║   ██║██║     ██╔═██╗ ',
+      '██║ ╚═╝ ██║╚██████╔╝██║ ╚████║╚██████╔╝██████╔╝███████╗╚██████╔╝╚██████╗██║  ██╗',
+      '╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝',
+      '',
+      '       M O N O S P A C E   C R E A T I V I T Y',
+      '        Enterprise-grade Grid-based Workflows',
+    ]
+    
+    // Create a Map for the logo data
+    const logoData = new Map<string, string>()
+    
+    // Center the logo in world space (0,0 is the center)
+    // Since grid coordinates can be negative, we center around (0,0)
+    const logoWidth = logoArt[0].length
+    const logoHeight = logoArt.length
+    const startX = Math.floor(-logoWidth / 2)
+    const startY = Math.floor(-logoHeight / 2)
+    
+    console.log('[DrawingCanvas] Logo dimensions:', logoWidth, 'x', logoHeight)
+    console.log('[DrawingCanvas] Logo position (grid):', startX, startY)
+    
+    // Add each character to the map
+    logoArt.forEach((line, y) => {
+      for (let x = 0; x < line.length; x++) {
+        const char = line[x]
+        if (char && char !== ' ') {
+          const gridX = startX + x
+          const gridY = startY + y
+          const key = `${gridX},${gridY}`
+          logoData.set(key, char)
+        }
+      }
+    })
+    
+    console.log('[DrawingCanvas] Logo data size:', logoData.size, 'characters')
+    
+    // Add the logo as a shape with a nice color
+    const logoShape = shapesStore.addShape('text', logoData, '#4A90E2', 'MONOBLOCKS Logo', {
+      content: 'MONOBLOCKS Logo',
+      isLogo: true
+    })
+    
+    console.log('[DrawingCanvas] Logo shape added:', logoShape)
+    console.log('[DrawingCanvas] Total shapes in store:', shapesStore.getAllShapes().length)
+    
+    toastStore.showToast('Canvas cleared - MONOBLOCKS logo added', 'info')
+    
+    // Force a render after a short delay to ensure everything is ready
+    setTimeout(() => {
+      console.log('[DrawingCanvas] Forcing render after logo addition')
+      forceRender()
+    }, 100)
+  } else {
+    console.log('[DrawingCanvas] User cancelled reset')
   }
 }
 
@@ -288,9 +378,6 @@ const setupEventListeners = () => {
   // Mouse event callbacks
   const mouseCallbacks = {
     onRender: render,
-    onShowTextInput: (screenX: number, screenY: number) => {
-      emit('showTextInput', screenX, screenY)
-    },
     screenToWorld,
     worldToScreen
   }
@@ -298,13 +385,16 @@ const setupEventListeners = () => {
   // Initialize mouse events with drawing states
   const drawingStates = {
     rectangleState,
+    diamondState,
     lineState,
     textState,
     currentStrokeData,
     placeCharacter,
     eraseAtPosition,
     drawRectangle,
-    drawLine
+    drawDiamond,
+    drawLine,
+    resetBrushTracking
   }
   const mouseEvents = useMouseEvents(canvasRef.value, mouseCallbacks, drawingStates)
   
@@ -405,7 +495,7 @@ onMounted(async () => {
               label: 'Recenter',
               action: () => {
                 resetView()
-                render()
+                requestRender()
                 toastStore.showToast('View recentered', 'success')
               }
             }
@@ -419,12 +509,9 @@ onMounted(async () => {
     // Setup event listeners
     const cleanupEvents = setupEventListeners()
     
-    // Expose functions globally for stores and components
-    window.renderCanvas = render
-    window.regenerateShape = regenerateShape
+    // Auto-render system handles rendering via events - no need for global functions
     
-    // Initial render
-    render()
+    // Auto-render system will handle initial render
     
     // Cleanup on unmount
     return () => {
@@ -447,8 +534,7 @@ defineExpose({
   performRedo,
   exportToPNG,
   shareCanvas,
-  copyToClipboard,
-  handleTextConfirm
+  copyToClipboard
 })
 </script>
 

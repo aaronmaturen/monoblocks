@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { useColorStore, type Color } from '../stores/colors'
 import { useToolStore } from '../stores/tools'
-import { useLayersStore } from '../stores/layers'
+import { useShapesStore } from '../stores/shapes'
 
 const colorStore = useColorStore()
 const toolStore = useToolStore()
-const layersStore = useLayersStore()
+const shapesStore = useShapesStore()
 
 const selectColor = (color: Color) => {
   colorStore.setSelectedColor(color)
   
   // If we're editing a shape's color, update it
   if (toolStore.editingShapeId) {
-    layersStore.updateShapeColor(toolStore.editingShapeId, color.hex)
+    shapesStore.updateShapeColor(toolStore.editingShapeId, color.hex)
     toolStore.setEditingShapeId(null) // Clear the editing state
   }
   

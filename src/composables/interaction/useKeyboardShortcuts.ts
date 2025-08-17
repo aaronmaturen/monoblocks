@@ -1,5 +1,5 @@
 import { useHistoryStore } from '../../stores/history'
-import { useLayersStore } from '../../stores/layers'
+import { useShapesStore } from '../../stores/shapes'
 import { useToastStore } from '../../stores/toast'
 
 export interface KeyboardShortcutCallbacks {
@@ -10,7 +10,7 @@ export interface KeyboardShortcutCallbacks {
 
 export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks = {}) {
   const historyStore = useHistoryStore()
-  const layersStore = useLayersStore()
+  const shapesStore = useShapesStore()
   const toastStore = useToastStore()
 
   const checkIsTypingInInput = (): boolean => {
@@ -24,7 +24,7 @@ export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks = {}) 
   }
 
   const performUndo = () => {
-    const success = layersStore.performUndo()
+    const success = shapesStore.performUndo()
     if (success) {
       callbacks.onRender?.()
       toastStore.showToast('Undone', 'info')
@@ -34,7 +34,7 @@ export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks = {}) 
   }
 
   const performRedo = () => {
-    const success = layersStore.performRedo()
+    const success = shapesStore.performRedo()
     if (success) {
       callbacks.onRender?.()
       toastStore.showToast('Redone', 'info')
@@ -64,41 +64,36 @@ export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks = {}) 
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
       e.preventDefault()
       // Select all visible shapes
-      const visibleShapes = layersStore.getAllVisibleShapes()
+      const visibleShapes = shapesStore.getAllVisibleShapes()
       if (visibleShapes.length > 0) {
         // Clear current selection
-        layersStore.selectShape(null)
+        shapesStore.selectShape(null)
         // Select all visible shapes
         for (const shape of visibleShapes) {
-          layersStore.selectShape(shape.id, true) // true for multi-select
+          shapesStore.selectShape(shape.id, true) // true for multi-select
         }
         callbacks.onRender?.()
       }
     } else if (e.key === 'Escape') {
       e.preventDefault()
       // Deselect all shapes on Escape key
-      layersStore.selectShape(null)
+      shapesStore.selectShape(null)
       callbacks.onRender?.()
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault()
       // Delete selected shapes
-      const selectedShapes = layersStore.getSelectedShapes()
+      const selectedShapes = shapesStore.getSelectedShapes()
       if (selectedShapes.length > 0) {
         let deletedCount = 0
         for (const shape of selectedShapes) {
-          // Find which layer contains this shape
-          const layer = layersStore.layers.find(l => l.shapes.some(s => s.id === shape.id))
-          if (layer) {
-            layersStore.deleteShape(layer.id, shape.id)
-            deletedCount++
-          }
+          shapesStore.deleteShape(shape.id)
+          deletedCount++
         }
         
         // Clear selection since all selected shapes were deleted
-        layersStore.selectShape(null)
+        shapesStore.selectShape(null)
         
-        // Save changes
-        layersStore.saveToStorage()
+        // shapesStore handles saving automatically
         
         // Force re-render
         callbacks.onRender?.()

@@ -1,23 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useToolStore, RECTANGLE_BORDER_STYLES } from '../stores/tools'
-import { useLayersStore } from '../stores/layers'
+import { useShapesStore } from '../stores/shapes'
 import { useColorStore } from '../stores/colors'
 import { useDrawingTools } from '../composables/drawing/useDrawingTools'
 
 const toolStore = useToolStore()
-const layersStore = useLayersStore()
+const shapesStore = useShapesStore()
 const colorStore = useColorStore()
-const { drawRectangle } = useDrawingTools()
+const { drawRectangle, drawDiamond } = useDrawingTools()
 
-const selectedShape = computed(() => layersStore.getSelectedShape())
-const selectedShapes = computed(() => layersStore.getSelectedShapes())
+const selectedShape = computed(() => shapesStore.getSelectedShape())
+const selectedShapes = computed(() => shapesStore.getSelectedShapes())
 const hasMultipleShapesSelected = computed(() => selectedShapes.value.length > 1)
 
 const toolDisplayNames: Record<string, string> = {
   pan: 'Pan Tool',
   brush: 'Brush Tool',
   rectangle: 'Rectangle Tool',
+  diamond: 'Diamond Tool',
   line: 'Line Tool',
   text: 'Text Tool',
   select: 'Select Tool',
@@ -29,36 +30,44 @@ const toolDisplayNames: Record<string, string> = {
 }
 
 const currentToolName = computed(() => {
-  // If we have a selected shape in select mode, show the shape's tool name
-  if (toolStore.currentTool === 'select' && selectedShape.value) {
-    return toolDisplayNames[selectedShape.value.type] || selectedShape.value.type
+  // If we have a selected shape, show we're editing it
+  if (selectedShape.value) {
+    return `Edit ${toolDisplayNames[selectedShape.value.type] || selectedShape.value.type}`
   }
   return toolDisplayNames[toolStore.currentTool] || toolStore.currentTool
 })
 
 // Determine which tool panel to show - either current tool or selected shape's type
 const activeToolType = computed(() => {
-  if (toolStore.currentTool === 'select' && selectedShape.value) {
+  // Always show shape settings if a shape is selected
+  if (selectedShape.value) {
     return selectedShape.value.type
   }
   return toolStore.currentTool
 })
 
-const hasSettings = computed(() => {
-  return ['brush', 'rectangle', 'line', 'text'].includes(activeToolType.value)
+// Check if we're editing an existing shape or creating a new one
+const isEditingShape = computed(() => {
+  return selectedShape.value !== null
 })
 
-// Hide the entire panel for pan, eraser, eyedropper, and select tools (unless select has a selected shape)
+const hasSettings = computed(() => {
+  return ['brush', 'rectangle', 'diamond', 'line', 'text'].includes(activeToolType.value)
+})
+
+// Hide the entire panel for pan, eraser, eyedropper tools (and select when nothing is selected)
 const showPanel = computed(() => {
+  // Never show for these tools
   if (toolStore.currentTool === 'pan') return false
   if (toolStore.currentTool === 'eraser') return false
   if (toolStore.currentTool === 'eyedropper') return false
-  if (
-    toolStore.currentTool === 'select' &&
-    !selectedShape.value &&
-    !hasMultipleShapesSelected.value
-  )
-    return false
+  
+  // For select tool, only show if something is selected
+  if (toolStore.currentTool === 'select') {
+    return selectedShape.value !== null || hasMultipleShapesSelected.value
+  }
+  
+  // Show for all other tools (brush, rectangle, diamond, line, text)
   return true
 })
 
@@ -69,42 +78,296 @@ const collapsedSections = ref<Record<string, boolean>>({
   border: false,
   shadow: true, // Start shadow collapsed
   size: false,
+  lineStyle: false,
+  endpoints: false,
+  lineColor: false,
+  lineSize: false,
 })
 
 const toggleSection = (section: string) => {
   collapsedSections.value[section] = !collapsedSections.value[section]
 }
 
+// Universal update function that updates either tool settings or shape settings
+const updateSetting = (settingName: string, value: any) => {
+  if (isEditingShape.value && selectedShape.value) {
+    // Update the selected shape's settings
+    const newSettings = {
+      ...selectedShape.value.toolSettings,
+      [settingName]: value
+    }
+    shapesStore.updateShapeSettings(selectedShape.value.id, newSettings)
+    // Regenerate the shape with new settings
+    shapesStore.regenerateShape(selectedShape.value.id)
+  } else {
+    // Update the tool store for new shapes based on tool type and setting
+    const toolType = activeToolType.value
+    
+    // Rectangle settings
+    if (toolType === 'rectangle') {
+      switch (settingName) {
+        case 'borderStyle': toolStore.setRectangleBorderStyle(value); break;
+        case 'fillChar': toolStore.setRectangleFillChar(value); break;
+        case 'showText': toolStore.setRectangleShowText(value); break;
+        case 'text': toolStore.setRectangleText(value); break;
+        case 'textAlign': toolStore.setRectangleTextAlign(value); break;
+        case 'textPosition': toolStore.setRectangleTextPosition(value); break;
+        case 'textColor': toolStore.setRectangleTextColor(value); break;
+        case 'showFill': toolStore.setRectangleShowFill(value); break;
+        case 'showBorder': toolStore.setRectangleShowBorder(value); break;
+        case 'showShadow': toolStore.setRectangleShowShadow(value); break;
+        case 'shadow': toolStore.setRectangleShadow(value); break;
+      }
+    }
+    // Diamond settings
+    else if (toolType === 'diamond') {
+      switch (settingName) {
+        case 'borderStyle': toolStore.setDiamondBorderStyle(value); break;
+        case 'fillChar': toolStore.setDiamondFillChar(value); break;
+        case 'showText': toolStore.setDiamondShowText(value); break;
+        case 'text': toolStore.setDiamondText(value); break;
+        case 'textAlign': toolStore.setDiamondTextAlign(value); break;
+        case 'textPosition': toolStore.setDiamondTextPosition(value); break;
+        case 'textColor': toolStore.setDiamondTextColor(value); break;
+        case 'showFill': toolStore.setDiamondShowFill(value); break;
+        case 'showBorder': toolStore.setDiamondShowBorder(value); break;
+        case 'showShadow': toolStore.setDiamondShowShadow(value); break;
+        case 'shadow': toolStore.setDiamondShadow(value); break;
+      }
+    }
+    // Line settings
+    else if (toolType === 'line') {
+      switch (settingName) {
+        case 'lineStyle': toolStore.setLineStyle(value); break;
+        case 'lineStartStyle': toolStore.setLineStartStyle(value); break;
+        case 'lineEndStyle': toolStore.setLineEndStyle(value); break;
+      }
+    }
+    // Text settings
+    else if (toolType === 'text') {
+      switch (settingName) {
+        case 'horizontalAlign': toolStore.setTextHorizontalAlign(value); break;
+        case 'verticalAlign': toolStore.setTextVerticalAlign(value); break;
+        case 'showBorder': toolStore.setTextShowBorder(value); break;
+      }
+    }
+    // Brush settings
+    else if (toolType === 'brush') {
+      if (settingName === 'character') {
+        toolStore.setSelectedCharacter(value);
+      }
+    }
+  }
+}
+
+// Computed properties for line settings
+const lineSettings = computed(() => {
+  if (isEditingShape.value && selectedShape.value?.type === 'line') {
+    return {
+      lineStyle: selectedShape.value.toolSettings?.lineStyle || 'single',
+      lineStartStyle: selectedShape.value.toolSettings?.lineStartStyle || 'none',
+      lineEndStyle: selectedShape.value.toolSettings?.lineEndStyle || 'none',
+    }
+  }
+  return {
+    lineStyle: toolStore.lineStyle || 'single',
+    lineStartStyle: toolStore.lineStartStyle || 'none',
+    lineEndStyle: toolStore.lineEndStyle || 'none',
+  }
+})
+
+// Computed properties for text settings
+const textSettings = computed(() => {
+  if (isEditingShape.value && selectedShape.value?.type === 'text') {
+    return {
+      content: selectedShape.value.toolSettings?.content || '',
+      horizontalAlign: selectedShape.value.toolSettings?.horizontalAlign || 'left',
+      verticalAlign: selectedShape.value.toolSettings?.verticalAlign || 'top',
+      showBorder: selectedShape.value.toolSettings?.showBorder ?? true,
+    }
+  }
+  return {
+    content: '',
+    horizontalAlign: toolStore.textHorizontalAlign || 'left',
+    verticalAlign: toolStore.textVerticalAlign || 'top',
+    showBorder: toolStore.textShowBorder ?? true,
+  }
+})
+
+// Computed properties for brush settings
+const brushSettings = computed(() => {
+  if (isEditingShape.value && selectedShape.value?.type === 'brush') {
+    return {
+      character: selectedShape.value.toolSettings?.character || toolStore.selectedCharacter
+    }
+  }
+  return {
+    character: toolStore.selectedCharacter
+  }
+})
+
+// Computed properties for rectangle settings - read from shape if editing, tool if creating
+const rectangleSettings = computed(() => {
+  if (isEditingShape.value && selectedShape.value?.type === 'rectangle') {
+    return {
+      borderStyle: selectedShape.value.toolSettings?.borderStyle || 'single',
+      fillChar: selectedShape.value.toolSettings?.fillChar || '',
+      showText: selectedShape.value.toolSettings?.showText ?? false,
+      text: selectedShape.value.toolSettings?.text || '',
+      textAlign: selectedShape.value.toolSettings?.textAlign || 'center',
+      textPosition: selectedShape.value.toolSettings?.textPosition || 'middle',
+      textColor: selectedShape.value.toolSettings?.textColor || colorStore.selectedColor.hex,
+      showFill: selectedShape.value.toolSettings?.showFill ?? true,
+      showBorder: selectedShape.value.toolSettings?.showBorder ?? true,
+      showShadow: selectedShape.value.toolSettings?.showShadow ?? false,
+      shadow: selectedShape.value.toolSettings?.shadow ?? false,
+    }
+  }
+  // Return tool settings for new rectangles
+  return {
+    borderStyle: toolStore.rectangleBorderStyle || 'single',
+    fillChar: toolStore.rectangleFillChar || '',
+    showText: toolStore.rectangleShowText ?? false,
+    text: toolStore.rectangleText || '',
+    textAlign: toolStore.rectangleTextAlign || 'center',
+    textPosition: toolStore.rectangleTextPosition || 'middle',
+    textColor: toolStore.rectangleTextColor || colorStore.selectedColor.hex,
+    showFill: toolStore.rectangleShowFill ?? true,
+    showBorder: toolStore.rectangleShowBorder ?? true,
+    showShadow: toolStore.rectangleShowShadow ?? false,
+    shadow: toolStore.rectangleShadow ?? false,
+  }
+})
+
+// Computed properties for diamond settings - read from shape if editing, tool if creating
+const diamondSettings = computed(() => {
+  if (isEditingShape.value && selectedShape.value?.type === 'diamond') {
+    return {
+      borderStyle: selectedShape.value.toolSettings?.borderStyle || 'single',
+      fillChar: selectedShape.value.toolSettings?.fillChar || '',
+      showText: selectedShape.value.toolSettings?.showText ?? false,
+      text: selectedShape.value.toolSettings?.text || '',
+      textAlign: selectedShape.value.toolSettings?.textAlign || 'center',
+      textPosition: selectedShape.value.toolSettings?.textPosition || 'middle',
+      textColor: selectedShape.value.toolSettings?.textColor || colorStore.selectedColor.hex,
+      showFill: selectedShape.value.toolSettings?.showFill ?? true,
+      showBorder: selectedShape.value.toolSettings?.showBorder ?? true,
+      showShadow: selectedShape.value.toolSettings?.showShadow ?? false,
+      shadow: selectedShape.value.toolSettings?.shadow ?? false,
+    }
+  }
+  // Return tool settings for new diamonds
+  return {
+    borderStyle: toolStore.diamondBorderStyle || 'single',
+    fillChar: toolStore.diamondFillChar || '',
+    showText: toolStore.diamondShowText ?? false,
+    text: toolStore.diamondText || '',
+    textAlign: toolStore.diamondTextAlign || 'center',
+    textPosition: toolStore.diamondTextPosition || 'middle',
+    textColor: toolStore.diamondTextColor || colorStore.selectedColor.hex,
+    showFill: toolStore.diamondShowFill ?? true,
+    showBorder: toolStore.diamondShowBorder ?? true,
+    showShadow: toolStore.diamondShowShadow ?? false,
+    shadow: toolStore.diamondShadow ?? false,
+  }
+})
+
 // Helper function to show border preview
 const getBorderPreview = () => {
-  const borderStyle = toolStore.rectangleBorderStyle || 'single'
+  const borderStyle = rectangleSettings.value.borderStyle as keyof typeof RECTANGLE_BORDER_STYLES
   const style = RECTANGLE_BORDER_STYLES[borderStyle]
   if (!style) return '┌─┐\n│ │\n└─┘' // Fallback preview
-  const fillChar = toolStore.rectangleFillChar || ' '
+  const fillChar = rectangleSettings.value.fillChar || ' '
   return `${style.topLeft}${style.horizontal}${style.horizontal}${style.horizontal}${style.topRight}
 ${style.vertical}${fillChar}${fillChar}${fillChar}${style.vertical}
 ${style.vertical}${fillChar}${fillChar}${fillChar}${style.vertical}
 ${style.bottomLeft}${style.horizontal}${style.horizontal}${style.horizontal}${style.bottomRight}`
 }
 
-// Handle color selection for selected shape
-const openColorPaletteForShape = () => {
+// Track which color we're currently editing
+const currentColorTarget = ref<'border' | 'fill' | 'text' | 'general'>('general')
+const pendingColorUpdate = ref<((color: string) => void) | null>(null)
+
+// Handle color selection for different color properties
+const openColorPickerFor = (target: 'border' | 'fill' | 'text' | 'general') => {
+  currentColorTarget.value = target
+  
+  // Set up the pending color update based on target
   if (selectedShape.value) {
-    // Store the current shape ID so we know what to update
-    if (toolStore.setEditingShapeId) {
-      toolStore.setEditingShapeId(selectedShape.value.id)
+    const shapeId = selectedShape.value.id
+    switch (target) {
+      case 'border':
+        pendingColorUpdate.value = (color: string) => {
+          shapesStore.updateShapeBorderColor(shapeId, color)
+          shapesStore.regenerateShape(shapeId)
+        }
+        break
+      case 'fill':
+        pendingColorUpdate.value = (color: string) => {
+          shapesStore.updateShapeFillColor(shapeId, color)
+          shapesStore.regenerateShape(shapeId)
+        }
+        break
+      case 'text':
+        pendingColorUpdate.value = (color: string) => {
+          shapesStore.updateShapeTextColor(shapeId, color)
+          shapesStore.regenerateShape(shapeId)
+        }
+        break
+      default:
+        pendingColorUpdate.value = (color: string) => {
+          shapesStore.updateShapeColor(shapeId, color)
+          shapesStore.regenerateShape(shapeId)
+        }
     }
-    // Open the color selector
-    if (colorStore.toggleColorSelector) {
-      colorStore.toggleColorSelector()
+  } else {
+    // For tool settings (new shapes)
+    switch (target) {
+      case 'border':
+        pendingColorUpdate.value = (color: string) => {
+          toolStore.setRectangleBorderColor(color)
+        }
+        break
+      case 'fill':
+        pendingColorUpdate.value = (color: string) => {
+          toolStore.setRectangleFillColor(color)
+        }
+        break
+      case 'text':
+        pendingColorUpdate.value = (color: string) => {
+          toolStore.setRectangleTextColor(color)
+        }
+        break
+      default:
+        pendingColorUpdate.value = null
     }
+  }
+  
+  // Open the color selector
+  if (colorStore.toggleColorSelector) {
+    colorStore.toggleColorSelector()
   }
 }
 
-const regenerateShape = (shapeId: string) => {
-  if ((window as any).regenerateShape) {
-    ;(window as any).regenerateShape(shapeId)
+// Handle color selection for selected shape (legacy compatibility)
+const openColorPaletteForShape = () => {
+  openColorPickerFor('general')
+}
+
+// Watch for when color selector is closed with a selection
+watch(() => colorStore.isColorSelectorVisible, (isOpen, wasOpen) => {
+  if (isOpen === false && wasOpen === true) {
+    const updateFn = pendingColorUpdate.value
+    if (updateFn) {
+      // Color selector was just closed, apply the pending update
+      updateFn(colorStore.selectedColor.hex)
+      pendingColorUpdate.value = null
+    }
   }
+})
+
+const regenerateShape = (shapeId: string) => {
+  shapesStore.regenerateShape(shapeId)
 }
 
 // Calculate shape dimensions
@@ -132,7 +395,7 @@ const getShapeDimensions = (shape: any) => {
 
 // Resize shape to specific dimensions
 const resizeShape = (shapeId: string, newWidth: number, newHeight: number) => {
-  const shape = layersStore.getSelectedShape()
+  const shape = shapesStore.getSelectedShape()
   if (!shape || shape.id !== shapeId) return
   
   // Get current dimensions
@@ -173,8 +436,7 @@ const resizeShape = (shapeId: string, newWidth: number, newHeight: number) => {
     
     shape.data = newData
     
-    layersStore.saveToStorage()
-    if (window.renderCanvas) window.renderCanvas()
+    // shapesStore handles saving and rendering automatically
   }
 }
 
@@ -248,11 +510,7 @@ const alignShapes = (
     }
   })
 
-  // Save changes and trigger render
-  layersStore.saveToStorage()
-  if ((window as any).renderCanvas) {
-    ;(window as any).renderCanvas()
-  }
+  // shapesStore handles saving and rendering automatically
 }
 </script>
 
@@ -315,7 +573,7 @@ const alignShapes = (
                 @input="
                   (e) =>
                     selectedShape &&
-                    layersStore.updateShapeName(
+                    shapesStore.updateShapeName(
                       selectedShape.id,
                       (e.target as HTMLInputElement).value,
                     )
@@ -334,7 +592,7 @@ const alignShapes = (
                   @input="
                     (e) =>
                       selectedShape &&
-                      layersStore.updateShapeSettings(selectedShape.id, {
+                      shapesStore.updateShapeSettings(selectedShape.id, {
                         character: (e.target as HTMLInputElement).value,
                       })
                   "
@@ -426,7 +684,7 @@ const alignShapes = (
                 @input="
                   (e) =>
                     selectedShape &&
-                    layersStore.updateShapeName(
+                    shapesStore.updateShapeName(
                       selectedShape.id,
                       (e.target as HTMLInputElement).value,
                     )
@@ -435,354 +693,15 @@ const alignShapes = (
               />
             </div>
 
-            <!-- Text Section -->
-            <div class="section-group">
-              <div class="section-header" @click="toggleSection('text')">
-                <input
-                  type="checkbox"
-                  class="section-checkbox"
-                  :checked="
-                    selectedShape
-                      ? selectedShape.toolSettings?.showText !== false
-                      : toolStore.rectangleShowText
-                  "
-                  @click.stop
-                  @change="
-                    (e) => {
-                      e.stopPropagation()
-                      if (selectedShape) {
-                        layersStore.updateShapeSettings(selectedShape.id, {
-                          showText: (e.target as HTMLInputElement).checked,
-                        })
-                        regenerateShape(selectedShape.id)
-                      } else {
-                        toolStore.setRectangleShowText((e.target as HTMLInputElement).checked)
-                      }
-                    }
-                  "
-                />
-                <span class="section-title">Text</span>
-                <span class="section-toggle">{{ collapsedSections.text ? '▶' : '▼' }}</span>
-              </div>
-              <div v-show="!collapsedSections.text" class="section-content">
-                <div class="setting-item">
-                  <label>Content</label>
-                  <input
-                    type="text"
-                    class="text-input"
-                    :value="
-                      selectedShape
-                        ? selectedShape.toolSettings?.text || ''
-                        : toolStore.rectangleText || ''
-                    "
-                    @input="
-                      (e) =>
-                        selectedShape
-                          ? layersStore.updateShapeSettings(selectedShape.id, {
-                              text: (e.target as HTMLInputElement).value,
-                            })
-                          : toolStore.setRectangleText &&
-                            toolStore.setRectangleText((e.target as HTMLInputElement).value)
-                    "
-                    placeholder="Text inside rectangle"
-                  />
-                </div>
-                <div class="setting-item">
-                  <label>Alignment</label>
-                  <div class="button-group">
-                    <button
-                      class="align-option-btn"
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.textAlign === 'left' || !selectedShape.toolSettings?.textAlign
-                          : toolStore.rectangleTextAlign === 'left' || !toolStore.rectangleTextAlign
-                      }"
-                      @click="
-                        selectedShape
-                          ? (layersStore.updateShapeSettings(selectedShape.id, { textAlign: 'left' }), regenerateShape(selectedShape.id))
-                          : toolStore.setRectangleTextAlign && toolStore.setRectangleTextAlign('left')
-                      "
-                      title="Align left"
-                    >
-                      Left
-                    </button>
-                    <button
-                      class="align-option-btn"
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.textAlign === 'center'
-                          : toolStore.rectangleTextAlign === 'center'
-                      }"
-                      @click="
-                        selectedShape
-                          ? (layersStore.updateShapeSettings(selectedShape.id, { textAlign: 'center' }), regenerateShape(selectedShape.id))
-                          : toolStore.setRectangleTextAlign && toolStore.setRectangleTextAlign('center')
-                      "
-                      title="Align center"
-                    >
-                      Center
-                    </button>
-                    <button
-                      class="align-option-btn"
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.textAlign === 'right'
-                          : toolStore.rectangleTextAlign === 'right'
-                      }"
-                      @click="
-                        selectedShape
-                          ? (layersStore.updateShapeSettings(selectedShape.id, { textAlign: 'right' }), regenerateShape(selectedShape.id))
-                          : toolStore.setRectangleTextAlign && toolStore.setRectangleTextAlign('right')
-                      "
-                      title="Align right"
-                    >
-                      Right
-                    </button>
-                  </div>
-                </div>
-                <div class="setting-item">
-                  <label>Position</label>
-                  <div class="button-group">
-                    <button
-                      class="align-option-btn"
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.textPosition === 'top' || !selectedShape.toolSettings?.textPosition
-                          : toolStore.rectangleTextPosition === 'top' || !toolStore.rectangleTextPosition
-                      }"
-                      @click="
-                        selectedShape
-                          ? (layersStore.updateShapeSettings(selectedShape.id, { textPosition: 'top' }), regenerateShape(selectedShape.id))
-                          : toolStore.setRectangleTextPosition && toolStore.setRectangleTextPosition('top')
-                      "
-                      title="Position top"
-                    >
-                      Top
-                    </button>
-                    <button
-                      class="align-option-btn"
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.textPosition === 'middle'
-                          : toolStore.rectangleTextPosition === 'middle'
-                      }"
-                      @click="
-                        selectedShape
-                          ? (layersStore.updateShapeSettings(selectedShape.id, { textPosition: 'middle' }), regenerateShape(selectedShape.id))
-                          : toolStore.setRectangleTextPosition && toolStore.setRectangleTextPosition('middle')
-                      "
-                      title="Position middle"
-                    >
-                      Middle
-                    </button>
-                    <button
-                      class="align-option-btn"
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.textPosition === 'bottom'
-                          : toolStore.rectangleTextPosition === 'bottom'
-                      }"
-                      @click="
-                        selectedShape
-                          ? (layersStore.updateShapeSettings(selectedShape.id, { textPosition: 'bottom' }), regenerateShape(selectedShape.id))
-                          : toolStore.setRectangleTextPosition && toolStore.setRectangleTextPosition('bottom')
-                      "
-                      title="Position bottom"
-                    >
-                      Bottom
-                    </button>
-                  </div>
-                </div>
-                <div class="setting-item">
-                  <label>Color</label>
-                  <div
-                    class="color-preview"
-                    :style="{
-                      backgroundColor: selectedShape?.toolSettings?.textColor || 
-                                      toolStore.rectangleTextColor || 
-                                      selectedShape?.color || 
-                                      colorStore.selectedColor.hex,
-                    }"
-                    @click="
-                      selectedShape ? openColorPaletteForShape() : colorStore.toggleColorSelector()
-                    "
-                    title="Click to change text color"
-                  >
-                    {{ selectedShape?.toolSettings?.textColor || 
-                       toolStore.rectangleTextColor || 
-                       selectedShape?.color || 
-                       colorStore.selectedColor.hex }}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Fill Section -->
-            <div class="section-group">
-              <div class="section-header" @click="toggleSection('fill')">
-                <input
-                  type="checkbox"
-                  class="section-checkbox"
-                  :checked="
-                    selectedShape
-                      ? selectedShape.toolSettings?.showFill !== false
-                      : toolStore.rectangleShowFill
-                  "
-                  @click.stop
-                  @change="
-                    (e) => {
-                      e.stopPropagation()
-                      if (selectedShape) {
-                        layersStore.updateShapeSettings(selectedShape.id, {
-                          showFill: (e.target as HTMLInputElement).checked,
-                        })
-                        regenerateShape(selectedShape.id)
-                      } else {
-                        toolStore.setRectangleShowFill((e.target as HTMLInputElement).checked)
-                      }
-                    }
-                  "
-                />
-                <span class="section-title">Fill</span>
-                <span class="section-toggle">{{ collapsedSections.fill ? '▶' : '▼' }}</span>
-              </div>
-              <div v-show="!collapsedSections.fill" class="section-content">
-                <div class="setting-item">
-                  <label>Character</label>
-                  <div class="fill-preset-options">
-                    <button
-                      class="fill-preset-btn"
-                      @click="
-                        selectedShape
-                          ? layersStore.updateShapeSettings(selectedShape.id, { fillChar: '' })
-                          : toolStore.setRectangleFillChar && toolStore.setRectangleFillChar('')
-                      "
-                      :class="{
-                        active: selectedShape
-                          ? !selectedShape.toolSettings?.fillChar ||
-                            selectedShape.toolSettings?.fillChar === ''
-                          : !toolStore.rectangleFillChar || toolStore.rectangleFillChar === '',
-                      }"
-                      title="No fill (empty)"
-                    >
-                      <span style="font-family: monospace">&nbsp;</span>
-                    </button>
-                    <button
-                      class="fill-preset-btn"
-                      @click="
-                        selectedShape
-                          ? layersStore.updateShapeSettings(selectedShape.id, { fillChar: '░' })
-                          : toolStore.setRectangleFillChar && toolStore.setRectangleFillChar('░')
-                      "
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.fillChar === '░'
-                          : toolStore.rectangleFillChar === '░',
-                      }"
-                      title="Light shade (25%)"
-                    >
-                      <span style="font-family: monospace">░</span>
-                    </button>
-                    <button
-                      class="fill-preset-btn"
-                      @click="
-                        selectedShape
-                          ? layersStore.updateShapeSettings(selectedShape.id, { fillChar: '▒' })
-                          : toolStore.setRectangleFillChar && toolStore.setRectangleFillChar('▒')
-                      "
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.fillChar === '▒'
-                          : toolStore.rectangleFillChar === '▒',
-                      }"
-                      title="Medium shade (50%)"
-                    >
-                      <span style="font-family: monospace">▒</span>
-                    </button>
-                    <button
-                      class="fill-preset-btn"
-                      @click="
-                        selectedShape
-                          ? layersStore.updateShapeSettings(selectedShape.id, { fillChar: '▓' })
-                          : toolStore.setRectangleFillChar && toolStore.setRectangleFillChar('▓')
-                      "
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.fillChar === '▓'
-                          : toolStore.rectangleFillChar === '▓',
-                      }"
-                      title="Dark shade (75%)"
-                    >
-                      <span style="font-family: monospace">▓</span>
-                    </button>
-                    <button
-                      class="fill-preset-btn"
-                      @click="
-                        selectedShape
-                          ? layersStore.updateShapeSettings(selectedShape.id, { fillChar: '█' })
-                          : toolStore.setRectangleFillChar && toolStore.setRectangleFillChar('█')
-                      "
-                      :class="{
-                        active: selectedShape
-                          ? selectedShape.toolSettings?.fillChar === '█'
-                          : toolStore.rectangleFillChar === '█',
-                      }"
-                      title="Solid (100%)"
-                    >
-                      <span style="font-family: monospace">█</span>
-                    </button>
-                  </div>
-                  <div class="fill-custom-input">
-                    <input
-                      type="text"
-                      class="fill-input"
-                      :value="
-                        selectedShape
-                          ? selectedShape.toolSettings?.fillChar || ''
-                          : toolStore.rectangleFillChar || ''
-                      "
-                      @input="
-                        (e) =>
-                          selectedShape
-                            ? layersStore.updateShapeSettings(selectedShape.id, {
-                                fillChar: (e.target as HTMLInputElement).value,
-                              })
-                            : toolStore.setRectangleFillChar &&
-                              toolStore.setRectangleFillChar((e.target as HTMLInputElement).value)
-                      "
-                      placeholder="Custom character (or leave empty)"
-                      maxlength="1"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <!-- Border Section -->
             <div class="section-group">
               <div class="section-header" @click="toggleSection('border')">
                 <input
                   type="checkbox"
                   class="section-checkbox"
-                  :checked="
-                    selectedShape
-                      ? selectedShape.toolSettings?.showBorder !== false
-                      : toolStore.rectangleShowBorder
-                  "
+                  :checked="rectangleSettings.showBorder"
                   @click.stop
-                  @change="
-                    (e) => {
-                      e.stopPropagation()
-                      if (selectedShape) {
-                        layersStore.updateShapeSettings(selectedShape.id, {
-                          showBorder: (e.target as HTMLInputElement).checked,
-                        })
-                        regenerateShape(selectedShape.id)
-                      } else {
-                        toolStore.setRectangleShowBorder((e.target as HTMLInputElement).checked)
-                      }
-                    }
-                  "
+                  @change="(e) => { e.stopPropagation(); updateSetting('showBorder', (e.target as HTMLInputElement).checked) }"
                 />
                 <span class="section-title">Border</span>
                 <span class="section-toggle">{{ collapsedSections.border ? '▶' : '▼' }}</span>
@@ -792,22 +711,8 @@ const alignShapes = (
                   <label>Style</label>
                   <select
                     class="select-input"
-                    :value="
-                      selectedShape
-                        ? selectedShape.toolSettings?.borderStyle || 'single'
-                        : toolStore.rectangleBorderStyle || 'single'
-                    "
-                    @change="
-                      (e) =>
-                        selectedShape
-                          ? layersStore.updateShapeSettings(selectedShape.id, {
-                              borderStyle: (e.target as HTMLSelectElement).value,
-                            })
-                          : toolStore.setRectangleBorderStyle &&
-                            toolStore.setRectangleBorderStyle(
-                              (e.target as HTMLSelectElement).value as any,
-                            )
-                    "
+                    :value="rectangleSettings.borderStyle"
+                    @change="(e) => updateSetting('borderStyle', (e.target as HTMLSelectElement).value)"
                   >
                     <option value="single">Single Line</option>
                     <option value="double">Double Line</option>
@@ -823,15 +728,13 @@ const alignShapes = (
                     class="color-preview"
                     :style="{
                       backgroundColor: selectedShape
-                        ? selectedShape.color
-                        : colorStore.selectedColor.hex,
+                        ? (selectedShape.borderColor || selectedShape.color)
+                        : toolStore.rectangleBorderColor,
                     }"
-                    @click="
-                      selectedShape ? openColorPaletteForShape() : colorStore.toggleColorSelector()
-                    "
-                    title="Click to change color"
+                    @click="() => openColorPickerFor('border')"
+                    title="Click to change border color"
                   >
-                    {{ selectedShape ? selectedShape.color : colorStore.selectedColor.hex }}
+                    {{ selectedShape ? (selectedShape.borderColor || selectedShape.color) : toolStore.rectangleBorderColor }}
                   </div>
                 </div>
                 <div v-if="!selectedShape" class="setting-item">
@@ -843,34 +746,102 @@ const alignShapes = (
               </div>
             </div>
 
+            <!-- Fill Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('fill')">
+                <input
+                  type="checkbox"
+                  class="section-checkbox"
+                  :checked="rectangleSettings.showFill"
+                  @click.stop
+                  @change="(e) => { e.stopPropagation(); updateSetting('showFill', (e.target as HTMLInputElement).checked) }"
+                />
+                <span class="section-title">Fill</span>
+                <span class="section-toggle">{{ collapsedSections.fill ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.fill" class="section-content">
+                <div class="setting-item">
+                  <label>Character</label>
+                  <div class="fill-preset-options">
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '')"
+                      :class="{ active: rectangleSettings.fillChar === '' }"
+                      title="No fill (empty)"
+                    >
+                      <span style="font-family: monospace">&nbsp;</span>
+                    </button>
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '░')"
+                      :class="{ active: rectangleSettings.fillChar === '░' }"
+                      title="Light shade (25%)"
+                    >
+                      <span style="font-family: monospace">░</span>
+                    </button>
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '▒')"
+                      :class="{ active: rectangleSettings.fillChar === '▒' }"
+                      title="Medium shade (50%)"
+                    >
+                      <span style="font-family: monospace">▒</span>
+                    </button>
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '▓')"
+                      :class="{ active: rectangleSettings.fillChar === '▓' }"
+                      title="Dark shade (75%)"
+                    >
+                      <span style="font-family: monospace">▓</span>
+                    </button>
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '█')"
+                      :class="{ active: rectangleSettings.fillChar === '█' }"
+                      title="Solid (100%)"
+                    >
+                      <span style="font-family: monospace">█</span>
+                    </button>
+                  </div>
+                  <div class="fill-custom-input">
+                    <input
+                      type="text"
+                      class="fill-input"
+                      :value="rectangleSettings.fillChar"
+                      @input="(e) => updateSetting('fillChar', (e.target as HTMLInputElement).value)"
+                      placeholder="Custom character (or leave empty)"
+                      maxlength="1"
+                    />
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label>Color</label>
+                  <div
+                    class="color-preview"
+                    :style="{
+                      backgroundColor: selectedShape
+                        ? (selectedShape.fillColor || selectedShape.color)
+                        : toolStore.rectangleFillColor,
+                    }"
+                    @click="() => openColorPickerFor('fill')"
+                    title="Click to change fill color"
+                  >
+                    {{ selectedShape ? (selectedShape.fillColor || selectedShape.color) : toolStore.rectangleFillColor }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Shadow Section -->
             <div class="section-group">
               <div class="section-header" @click="toggleSection('shadow')">
                 <input
                   type="checkbox"
                   class="section-checkbox"
-                  :checked="
-                    selectedShape
-                      ? selectedShape.toolSettings?.showShadow === true
-                      : toolStore.rectangleShowShadow
-                  "
+                  :checked="rectangleSettings.showShadow"
                   @click.stop
-                  @change="
-                    (e) => {
-                      e.stopPropagation()
-                      const checked = (e.target as HTMLInputElement).checked
-                      if (selectedShape) {
-                        layersStore.updateShapeSettings(selectedShape.id, {
-                          showShadow: checked,
-                          shadow: checked  // Also update the legacy shadow property
-                        })
-                        regenerateShape(selectedShape.id)
-                      } else {
-                        toolStore.setRectangleShowShadow(checked)
-                        toolStore.setRectangleShadow(checked)  // Also update the legacy shadow property
-                      }
-                    }
-                  "
+                  @change="(e) => { e.stopPropagation(); const checked = (e.target as HTMLInputElement).checked; updateSetting('showShadow', checked); updateSetting('shadow', checked) }"
                 />
                 <span class="section-title">Shadow</span>
                 <span class="section-toggle">{{ collapsedSections.shadow ? '▶' : '▼' }}</span>
@@ -881,20 +852,438 @@ const alignShapes = (
                     <input
                       type="checkbox"
                       class="checkbox-input"
-                      :checked="
-                        selectedShape
-                          ? selectedShape.toolSettings?.shadow || false
-                          : toolStore.rectangleShadow
-                      "
-                      @change="
-                        (e) =>
-                          selectedShape
-                            ? layersStore.updateShapeSettings(selectedShape.id, {
-                                shadow: (e.target as HTMLInputElement).checked,
-                              })
-                            : toolStore.setRectangleShadow &&
-                              toolStore.setRectangleShadow((e.target as HTMLInputElement).checked)
-                      "
+                      :checked="rectangleSettings.shadow"
+                      @change="(e) => updateSetting('shadow', (e.target as HTMLInputElement).checked)"
+                    />
+                    <span class="checkbox-label">{{
+                      selectedShape ? 'Has drop shadow' : 'Add drop shadow'
+                    }}</span>
+                  </div>
+                </div>
+                <!-- Future: shadow color, character, x/y offset -->
+              </div>
+            </div>
+
+            <!-- Text Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('text')">
+                <input
+                  type="checkbox"
+                  class="section-checkbox"
+                  :checked="rectangleSettings.showText"
+                  @click.stop
+                  @change="(e) => { e.stopPropagation(); updateSetting('showText', (e.target as HTMLInputElement).checked) }"
+                />
+                <span class="section-title">Text</span>
+                <span class="section-toggle">{{ collapsedSections.text ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.text" class="section-content">
+                <div class="setting-item">
+                  <label>Content</label>
+                  <input
+                    type="text"
+                    class="text-input"
+                    :value="rectangleSettings.text"
+                    @input="(e) => updateSetting('text', (e.target as HTMLInputElement).value)"
+                    placeholder="Text inside rectangle"
+                  />
+                </div>
+                <div class="setting-item">
+                  <label>Alignment</label>
+                  <div class="button-group">
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: rectangleSettings.textAlign === 'left' }"
+                      @click="updateSetting('textAlign', 'left')"
+                      title="Align left"
+                    >
+                      Left
+                    </button>
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: rectangleSettings.textAlign === 'center' }"
+                      @click="updateSetting('textAlign', 'center')"
+                      title="Align center"
+                    >
+                      Center
+                    </button>
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: rectangleSettings.textAlign === 'right' }"
+                      @click="updateSetting('textAlign', 'right')"
+                      title="Align right"
+                    >
+                      Right
+                    </button>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label>Position</label>
+                  <div class="button-group">
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: rectangleSettings.textPosition === 'top' }"
+                      @click="updateSetting('textPosition', 'top')"
+                      title="Position top"
+                    >
+                      Top
+                    </button>
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: rectangleSettings.textPosition === 'middle' }"
+                      @click="updateSetting('textPosition', 'middle')"
+                      title="Position middle"
+                    >
+                      Middle
+                    </button>
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: rectangleSettings.textPosition === 'bottom' }"
+                      @click="updateSetting('textPosition', 'bottom')"
+                      title="Position bottom"
+                    >
+                      Bottom
+                    </button>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label>Color</label>
+                  <div
+                    class="color-preview"
+                    :style="{
+                      backgroundColor: selectedShape
+                        ? (selectedShape.textColor || selectedShape.color)
+                        : toolStore.rectangleTextColor
+                    }"
+                    @click="() => openColorPickerFor('text')"
+                    title="Click to change text color"
+                  >
+                    {{ selectedShape ? (selectedShape.textColor || selectedShape.color) : toolStore.rectangleTextColor }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Size Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('size')">
+                <span class="section-title">Size</span>
+                <span class="section-toggle">{{ collapsedSections.size ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.size" class="section-content">
+                <div class="setting-item">
+                  <label>Dimensions</label>
+                  <div class="size-inputs">
+                    <div class="size-input-group">
+                      <span class="size-label">Width:</span>
+                      <input
+                        type="number"
+                        :value="selectedShape ? getShapeDimensions(selectedShape).width : 10"
+                        @change="(e) => {
+                          const newWidth = parseInt((e.target as HTMLInputElement).value)
+                          if (selectedShape) {
+                            const height = getShapeDimensions(selectedShape).height
+                            if (newWidth > 0) {
+                              resizeShape(selectedShape.id, newWidth, height)
+                            }
+                          }
+                        }"
+                        min="3"
+                        max="100"
+                        class="size-input"
+                        :disabled="!selectedShape"
+                      />
+                    </div>
+                    <div class="size-input-group">
+                      <span class="size-label">Height:</span>
+                      <input
+                        type="number"
+                        :value="selectedShape ? getShapeDimensions(selectedShape).height : 10"
+                        @change="(e) => {
+                          const newHeight = parseInt((e.target as HTMLInputElement).value)
+                          if (selectedShape) {
+                            const width = getShapeDimensions(selectedShape).width
+                            if (newHeight > 0) {
+                              resizeShape(selectedShape.id, width, newHeight)
+                            }
+                          }
+                        }"
+                        min="3"
+                        max="100"
+                        class="size-input"
+                        :disabled="!selectedShape"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Diamond Tool Settings -->
+          <div v-if="activeToolType === 'diamond'" class="tool-settings">
+            <!-- Name field for selected shapes -->
+            <div v-if="selectedShape" class="setting-item">
+              <label>Name</label>
+              <input
+                type="text"
+                :value="selectedShape.name"
+                @input="
+                  (e) =>
+                    selectedShape &&
+                    shapesStore.updateShapeName(
+                      selectedShape.id,
+                      (e.target as HTMLInputElement).value,
+                    )
+                "
+                class="text-input"
+              />
+            </div>
+            <!-- Border Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('border')">
+                <input
+                  type="checkbox"
+                  class="section-checkbox"
+                  :checked="diamondSettings.showBorder"
+                  @click.stop
+                  @change="(e) => { e.stopPropagation(); updateSetting('showBorder', (e.target as HTMLInputElement).checked) }"
+                />
+                <span class="section-title">Border</span>
+                <span class="section-toggle">{{ collapsedSections.border ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.border" class="section-content">
+                <div class="setting-item">
+                  <label>Color</label>
+                  <div
+                    class="color-preview"
+                    :style="{
+                      backgroundColor: selectedShape
+                        ? (selectedShape.borderColor || selectedShape.color)
+                        : colorStore.selectedColor.hex,
+                    }"
+                    @click="() => openColorPickerFor('border')"
+                    title="Click to change border color"
+                  >
+                    {{ selectedShape ? (selectedShape.borderColor || selectedShape.color) : colorStore.selectedColor.hex }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Fill Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('fill')">
+                <input
+                  type="checkbox"
+                  class="section-checkbox"
+                  :checked="diamondSettings.showFill"
+                  @click.stop
+                  @change="(e) => { e.stopPropagation(); updateSetting('showFill', (e.target as HTMLInputElement).checked) }"
+                />
+                <span class="section-title">Fill</span>
+                <span class="section-toggle">{{ collapsedSections.fill ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.fill" class="section-content">
+                <div class="setting-item">
+                  <label>Character</label>
+                  <div class="fill-preset-options">
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '')"
+                      :class="{ active: diamondSettings.fillChar === '' }"
+                      title="No fill (empty)"
+                    >
+                      <span style="font-family: monospace">&nbsp;</span>
+                    </button>
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '░')"
+                      :class="{ active: diamondSettings.fillChar === '░' }"
+                      title="Light shade (25%)"
+                    >
+                      <span style="font-family: monospace">░</span>
+                    </button>
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '▒')"
+                      :class="{ active: diamondSettings.fillChar === '▒' }"
+                      title="Medium shade (50%)"
+                    >
+                      <span style="font-family: monospace">▒</span>
+                    </button>
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '▓')"
+                      :class="{ active: diamondSettings.fillChar === '▓' }"
+                      title="Dark shade (75%)"
+                    >
+                      <span style="font-family: monospace">▓</span>
+                    </button>
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '█')"
+                      :class="{ active: diamondSettings.fillChar === '█' }"
+                      title="Solid (100%)"
+                    >
+                      <span style="font-family: monospace">█</span>
+                    </button>
+                    <button
+                      class="fill-preset-btn"
+                      @click="updateSetting('fillChar', '◆')"
+                      :class="{ active: diamondSettings.fillChar === '◆' }"
+                      title="Diamond"
+                    >
+                      <span style="font-family: monospace">◆</span>
+                    </button>
+                  </div>
+                  <div class="fill-custom-input">
+                    <input
+                      type="text"
+                      class="fill-input"
+                      :value="diamondSettings.fillChar"
+                      @input="(e) => updateSetting('fillChar', (e.target as HTMLInputElement).value)"
+                      placeholder="Custom character (or leave empty)"
+                      maxlength="1"
+                    />
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label>Color</label>
+                  <div
+                    class="color-preview"
+                    :style="{
+                      backgroundColor: selectedShape
+                        ? (selectedShape.fillColor || selectedShape.color)
+                        : colorStore.selectedColor.hex,
+                    }"
+                    @click="() => openColorPickerFor('fill')"
+                    title="Click to change fill color"
+                  >
+                    {{ selectedShape ? (selectedShape.fillColor || selectedShape.color) : colorStore.selectedColor.hex }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Text Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('text')">
+                <input
+                  type="checkbox"
+                  class="section-checkbox"
+                  :checked="diamondSettings.showText"
+                  @click.stop
+                  @change="(e) => { e.stopPropagation(); updateSetting('showText', (e.target as HTMLInputElement).checked) }"
+                />
+                <span class="section-title">Text</span>
+                <span class="section-toggle">{{ collapsedSections.text ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.text" class="section-content">
+                <div class="setting-item">
+                  <label>Content</label>
+                  <input
+                    type="text"
+                    class="text-input"
+                    :value="diamondSettings.text"
+                    @input="(e) => updateSetting('text', (e.target as HTMLInputElement).value)"
+                    placeholder="Text inside diamond"
+                  />
+                </div>
+                <div class="setting-item">
+                  <label>Alignment</label>
+                  <div class="button-group">
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: diamondSettings.textAlign === 'left' }"
+                      @click="updateSetting('textAlign', 'left')"
+                      title="Align left"
+                    >
+                      Left
+                    </button>
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: diamondSettings.textAlign === 'center' }"
+                      @click="updateSetting('textAlign', 'center')"
+                      title="Align center"
+                    >
+                      Center
+                    </button>
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: diamondSettings.textAlign === 'right' }"
+                      @click="updateSetting('textAlign', 'right')"
+                      title="Align right"
+                    >
+                      Right
+                    </button>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label>Position</label>
+                  <div class="button-group">
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: diamondSettings.textPosition === 'top' }"
+                      @click="updateSetting('textPosition', 'top')"
+                      title="Position top"
+                    >
+                      Top
+                    </button>
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: diamondSettings.textPosition === 'middle' }"
+                      @click="updateSetting('textPosition', 'middle')"
+                      title="Position middle"
+                    >
+                      Middle
+                    </button>
+                    <button
+                      class="align-option-btn"
+                      :class="{ active: diamondSettings.textPosition === 'bottom' }"
+                      @click="updateSetting('textPosition', 'bottom')"
+                      title="Position bottom"
+                    >
+                      Bottom
+                    </button>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label>Color</label>
+                  <div
+                    class="color-preview"
+                    :style="{
+                      backgroundColor: selectedShape
+                        ? (selectedShape.textColor || selectedShape.color)
+                        : toolStore.diamondTextColor
+                    }"
+                    @click="() => openColorPickerFor('text')"
+                    title="Click to change text color"
+                  >
+                    {{ selectedShape ? (selectedShape.textColor || selectedShape.color) : toolStore.diamondTextColor }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Shadow Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('shadow')">
+                <input
+                  type="checkbox"
+                  class="section-checkbox"
+                  :checked="diamondSettings.showShadow"
+                  @click.stop
+                  @change="(e) => { e.stopPropagation(); const checked = (e.target as HTMLInputElement).checked; updateSetting('showShadow', checked); updateSetting('shadow', checked) }"
+                />
+                <span class="section-title">Shadow</span>
+                <span class="section-toggle">{{ collapsedSections.shadow ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.shadow" class="section-content">
+                <div class="setting-item">
+                  <div class="checkbox-wrapper">
+                    <input
+                      type="checkbox"
+                      class="checkbox-input"
+                      :checked="diamondSettings.shadow"
+                      @change="(e) => updateSetting('shadow', (e.target as HTMLInputElement).checked)"
                     />
                     <span class="checkbox-label">{{
                       selectedShape ? 'Has drop shadow' : 'Add drop shadow'
@@ -973,7 +1362,7 @@ const alignShapes = (
                 @input="
                   (e) =>
                     selectedShape &&
-                    layersStore.updateShapeName(
+                    shapesStore.updateShapeName(
                       selectedShape.id,
                       (e.target as HTMLInputElement).value,
                     )
@@ -981,138 +1370,174 @@ const alignShapes = (
                 class="text-input"
               />
             </div>
-            <div class="setting-item">
-              <label>Line Style</label>
-              <select
-                class="select-input"
-                :value="
-                  selectedShape
-                    ? selectedShape.toolSettings?.lineStyle || 'single'
-                    : toolStore.lineStyle || 'single'
-                "
-                @change="
-                  (e) =>
-                    selectedShape
-                      ? layersStore.updateShapeSettings(selectedShape.id, {
-                          lineStyle: (e.target as HTMLSelectElement).value,
-                        })
-                      : toolStore.setLineStyle &&
-                        toolStore.setLineStyle((e.target as HTMLSelectElement).value as any)
-                "
-              >
-                <option value="single">Single Line</option>
-                <option value="double">Double Line</option>
-                <option value="thick">Thick Line</option>
-                <option value="dashed">Dashed</option>
-                <option value="dotted">Dotted</option>
-                <option value="arrow">Arrow</option>
-              </select>
-            </div>
-            <div class="setting-item">
-              <label>Start Style</label>
-              <select
-                class="select-input"
-                :value="
-                  selectedShape
-                    ? selectedShape.toolSettings?.lineStartStyle || 'none'
-                    : toolStore.lineStartStyle || 'none'
-                "
-                @change="
-                  (e) =>
-                    selectedShape
-                      ? layersStore.updateShapeSettings(selectedShape.id, {
-                          lineStartStyle: (e.target as HTMLSelectElement).value,
-                        })
-                      : toolStore.setLineStartStyle &&
-                        toolStore.setLineStartStyle((e.target as HTMLSelectElement).value as any)
-                "
-              >
-                <option value="none">None</option>
-                <option value="arrow">Arrow</option>
-                <option value="circle">Circle</option>
-                <option value="square">Square</option>
-              </select>
-            </div>
-            <div class="setting-item">
-              <label>End Style</label>
-              <select
-                class="select-input"
-                :value="
-                  selectedShape
-                    ? selectedShape.toolSettings?.lineEndStyle || 'arrow'
-                    : toolStore.lineEndStyle || 'arrow'
-                "
-                @change="
-                  (e) =>
-                    selectedShape
-                      ? layersStore.updateShapeSettings(selectedShape.id, {
-                          lineEndStyle: (e.target as HTMLSelectElement).value,
-                        })
-                      : toolStore.setLineEndStyle &&
-                        toolStore.setLineEndStyle((e.target as HTMLSelectElement).value as any)
-                "
-              >
-                <option value="none">None</option>
-                <option value="arrow">Arrow</option>
-                <option value="circle">Circle</option>
-                <option value="square">Square</option>
-              </select>
-            </div>
-            <div class="setting-item">
-              <label>Color</label>
-              <div
-                class="color-preview"
-                :style="{
-                  backgroundColor: selectedShape
-                    ? selectedShape.color
-                    : colorStore.selectedColor.hex,
-                }"
-                @click="
-                  selectedShape ? openColorPaletteForShape() : colorStore.toggleColorSelector()
-                "
-                title="Click to change color"
-              >
-                {{ selectedShape ? selectedShape.color : colorStore.selectedColor.hex }}
+
+            <!-- Line Style Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('lineStyle')">
+                <span class="section-title">Line Style</span>
+                <span class="section-toggle">{{ collapsedSections.lineStyle ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.lineStyle" class="section-content">
+                <div class="setting-item">
+                  <label>Style</label>
+                  <select
+                    class="select-input"
+                    :value="
+                      selectedShape
+                        ? selectedShape.toolSettings?.lineStyle || 'single'
+                        : toolStore.lineStyle || 'single'
+                    "
+                    @change="
+                      (e) =>
+                        selectedShape
+                          ? shapesStore.updateShapeSettings(selectedShape.id, {
+                              lineStyle: (e.target as HTMLSelectElement).value,
+                            })
+                          : toolStore.setLineStyle &&
+                            toolStore.setLineStyle((e.target as HTMLSelectElement).value as any)
+                    "
+                  >
+                    <option value="single">Single ─│/\</option>
+                    <option value="double">Double ═║</option>
+                    <option value="thick">Thick ━┃</option>
+                    <option value="dashed">Dashed ╌╎</option>
+                    <option value="dotted">Dotted ···</option>
+                    <option value="arrow">Arrow →</option>
+                  </select>
+                </div>
               </div>
             </div>
 
-            <!-- Shape dimensions for selected shapes -->
-            <div v-if="selectedShape" class="setting-item">
-              <label>Size</label>
-              <div class="size-inputs">
-                <div class="size-input-group">
-                  <span class="size-label">W:</span>
-                  <input
-                    type="number"
-                    :value="getShapeDimensions(selectedShape).width"
-                    @change="(e) => {
-                      const newWidth = parseInt((e.target as HTMLInputElement).value)
-                      const height = getShapeDimensions(selectedShape).height
-                      if (newWidth > 0 && selectedShape) {
-                        resizeShape(selectedShape.id, newWidth, height)
-                      }
-                    }"
-                    min="3"
-                    max="100"
-                    class="size-input"
-                  />
+            <!-- Line Endpoints Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('endpoints')">
+                <span class="section-title">Endpoints</span>
+                <span class="section-toggle">{{ collapsedSections.endpoints ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.endpoints" class="section-content">
+                <div class="setting-item">
+                  <label>Start</label>
+                  <select
+                    class="select-input"
+                    :value="
+                      selectedShape
+                        ? selectedShape.toolSettings?.lineStartStyle || 'none'
+                        : toolStore.lineStartStyle || 'none'
+                    "
+                    @change="
+                      (e) =>
+                        selectedShape
+                          ? shapesStore.updateShapeSettings(selectedShape.id, {
+                              lineStartStyle: (e.target as HTMLSelectElement).value,
+                            })
+                          : toolStore.setLineStartStyle &&
+                            toolStore.setLineStartStyle((e.target as HTMLSelectElement).value as any)
+                    "
+                  >
+                    <option value="none">None</option>
+                    <option value="arrow">← Arrow</option>
+                    <option value="circle">○ Circle</option>
+                    <option value="square">□ Square</option>
+                  </select>
                 </div>
-                <div class="size-input-group">
-                  <span class="size-label">H:</span>
-                  <input
-                    type="number"
-                    :value="getShapeDimensions(selectedShape).height"
-                    @change="(e) => {
-                      const newHeight = parseInt((e.target as HTMLInputElement).value)
-                      const width = getShapeDimensions(selectedShape).width
-                      if (newHeight > 0 && selectedShape) {
-                        resizeShape(selectedShape.id, width, newHeight)
-                      }
+                <div class="setting-item">
+                  <label>End</label>
+                  <select
+                    class="select-input"
+                    :value="
+                      selectedShape
+                        ? selectedShape.toolSettings?.lineEndStyle || 'arrow'
+                        : toolStore.lineEndStyle || 'arrow'
+                    "
+                    @change="
+                      (e) =>
+                        selectedShape
+                          ? shapesStore.updateShapeSettings(selectedShape.id, {
+                              lineEndStyle: (e.target as HTMLSelectElement).value,
+                            })
+                          : toolStore.setLineEndStyle &&
+                            toolStore.setLineEndStyle((e.target as HTMLSelectElement).value as any)
+                    "
+                  >
+                    <option value="none">None</option>
+                    <option value="arrow">Arrow →</option>
+                    <option value="circle">Circle ○</option>
+                    <option value="square">Square □</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Color Section -->
+            <div class="section-group">
+              <div class="section-header" @click="toggleSection('lineColor')">
+                <span class="section-title">Color</span>
+                <span class="section-toggle">{{ collapsedSections.lineColor ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.lineColor" class="section-content">
+                <div class="setting-item">
+                  <div
+                    class="color-preview"
+                    :style="{
+                      backgroundColor: selectedShape
+                        ? selectedShape.color
+                        : colorStore.selectedColor.hex,
                     }"
-                    min="3"
-                    max="100"
-                    class="size-input"
-                  />
+                    @click="
+                      selectedShape ? openColorPaletteForShape() : colorStore.toggleColorSelector()
+                    "
+                    title="Click to change color"
+                  >
+                    {{ selectedShape ? selectedShape.color : colorStore.selectedColor.hex }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Size Section for selected shapes -->
+            <div v-if="selectedShape" class="section-group">
+              <div class="section-header" @click="toggleSection('lineSize')">
+                <span class="section-title">Size</span>
+                <span class="section-toggle">{{ collapsedSections.lineSize ? '▶' : '▼' }}</span>
+              </div>
+              <div v-show="!collapsedSections.lineSize" class="section-content">
+                <div class="setting-item">
+                  <div class="size-inputs">
+                    <div class="size-input-group">
+                      <span class="size-label">W:</span>
+                      <input
+                        type="number"
+                        :value="getShapeDimensions(selectedShape).width"
+                        @change="(e) => {
+                          const newWidth = parseInt((e.target as HTMLInputElement).value)
+                          const height = getShapeDimensions(selectedShape).height
+                          if (newWidth > 0 && selectedShape) {
+                            resizeShape(selectedShape.id, newWidth, height)
+                          }
+                        }"
+                        min="3"
+                        max="100"
+                        class="size-input"
+                      />
+                    </div>
+                    <div class="size-input-group">
+                      <span class="size-label">H:</span>
+                      <input
+                        type="number"
+                        :value="getShapeDimensions(selectedShape).height"
+                        @change="(e) => {
+                          const newHeight = parseInt((e.target as HTMLInputElement).value)
+                          const width = getShapeDimensions(selectedShape).width
+                          if (newHeight > 0 && selectedShape) {
+                            resizeShape(selectedShape.id, width, newHeight)
+                          }
+                        }"
+                        min="3"
+                        max="100"
+                        class="size-input"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1130,7 +1555,7 @@ const alignShapes = (
                 @input="
                   (e) =>
                     selectedShape &&
-                    layersStore.updateShapeName(
+                    shapesStore.updateShapeName(
                       selectedShape.id,
                       (e.target as HTMLInputElement).value,
                     )
@@ -1147,7 +1572,7 @@ const alignShapes = (
                 @input="
                   (e) => {
                     selectedShape &&
-                      layersStore.updateShapeSettings(selectedShape.id, {
+                      shapesStore.updateShapeSettings(selectedShape.id, {
                         ...selectedShape.toolSettings,
                         content: (e.target as HTMLTextAreaElement).value,
                       })
@@ -1179,7 +1604,7 @@ const alignShapes = (
                   (e) => {
                     if (selectedShape) {
                       selectedShape &&
-                        layersStore.updateShapeSettings(selectedShape.id, {
+                        shapesStore.updateShapeSettings(selectedShape.id, {
                           ...selectedShape.toolSettings,
                           horizontalAlign: (e.target as HTMLSelectElement).value,
                         })
@@ -1212,7 +1637,7 @@ const alignShapes = (
                   (e) => {
                     if (selectedShape) {
                       selectedShape &&
-                        layersStore.updateShapeSettings(selectedShape.id, {
+                        shapesStore.updateShapeSettings(selectedShape.id, {
                           ...selectedShape.toolSettings,
                           verticalAlign: (e.target as HTMLSelectElement).value,
                         })
@@ -1245,7 +1670,7 @@ const alignShapes = (
                     (e) => {
                       if (selectedShape) {
                         selectedShape &&
-                          layersStore.updateShapeSettings(selectedShape.id, {
+                          shapesStore.updateShapeSettings(selectedShape.id, {
                             ...selectedShape.toolSettings,
                             showBorder: (e.target as HTMLInputElement).checked,
                           })

@@ -2,7 +2,7 @@ import { reactive } from 'vue'
 import { useCoordinateSystem } from '../canvas/useCoordinateSystem'
 import { useSelection, type AnchorType, type ShapeBounds } from './useSelection'
 import { useDrawingTools } from '../drawing/useDrawingTools'
-import { useLayersStore, type Shape } from '../../stores/layers'
+import { useShapesStore, type Shape } from '../../stores/shapes'
 import { useToolStore } from '../../stores/tools'
 
 export interface ShapeDragState {
@@ -28,7 +28,7 @@ export function useShapeManipulation() {
   const { worldToGrid, gridToWorld, gridKey } = useCoordinateSystem()
   const { getShapeBounds } = useSelection()
   const { drawRectangle, drawLine, drawText } = useDrawingTools()
-  const layersStore = useLayersStore()
+  const shapesStore = useShapesStore()
   const toolStore = useToolStore()
 
   // Shape dragging state
@@ -87,7 +87,7 @@ export function useShapeManipulation() {
       shapeDragState.offsetY = offsetY
 
       // Update the shape's data with the new positions
-      const selectedShape = layersStore.getSelectedShape()
+      const selectedShape = shapesStore.getSelectedShape()
       if (selectedShape && shapeDragState.originalData) {
         // Clear current shape data
         selectedShape.data.clear()
@@ -108,7 +108,7 @@ export function useShapeManipulation() {
   const updateShapeResize = (gridX: number, gridY: number) => {
     if (!shapeResizeState.isResizing || !shapeResizeState.originalBounds) return
 
-    const selectedShape = layersStore.getSelectedShape()
+    const selectedShape = shapesStore.getSelectedShape()
     if (!selectedShape) return
 
     const deltaX = gridX - shapeResizeState.startMouseX
@@ -121,6 +121,8 @@ export function useShapeManipulation() {
       updateLineResize(selectedShape, deltaX, deltaY, originalBounds)
     } else if (selectedShape.type === 'text') {
       updateTextResize(selectedShape, deltaX, deltaY, originalBounds)
+    } else if (selectedShape.type === 'image') {
+      updateImageResize(selectedShape, deltaX, deltaY, originalBounds)
     }
   }
 
@@ -167,31 +169,26 @@ export function useShapeManipulation() {
     if (newMaxX <= newMinX) newMaxX = newMinX + 1
     if (newMaxY <= newMinY) newMaxY = newMinY + 1
 
-    // Recreate rectangle with new bounds, preserving tool settings
-    const borderStyle = shape.toolSettings?.borderStyle || toolStore.rectangleBorderStyle
-    const fillChar = shape.toolSettings?.fillChar || toolStore.rectangleFillChar
-    const shadow = shape.toolSettings?.shadow || toolStore.rectangleShadow
-
-    // Temporarily set tool settings to match shape settings
-    const oldBorderStyle = toolStore.rectangleBorderStyle
-    const oldFillChar = toolStore.rectangleFillChar
-    const oldShadow = toolStore.rectangleShadow
-
-    toolStore.rectangleBorderStyle = borderStyle as any
-    toolStore.rectangleFillChar = fillChar || ''
-    toolStore.rectangleShadow = shadow || false
-
+    // Recreate rectangle with new bounds, preserving ALL tool settings including checkboxes
     const rectangleData = drawRectangle(
       gridToWorld(newMinX, newMinY).x,
       gridToWorld(newMinX, newMinY).y,
       gridToWorld(newMaxX, newMaxY).x,
-      gridToWorld(newMaxY, newMaxY).y
+      gridToWorld(newMaxY, newMaxY).y,
+      {
+        borderStyle: shape.toolSettings?.borderStyle || 'single',
+        fillChar: shape.toolSettings?.fillChar ?? '',
+        shadow: shape.toolSettings?.shadow ?? false,
+        text: shape.toolSettings?.text ?? '',
+        textAlign: shape.toolSettings?.textAlign || 'center',
+        textPosition: shape.toolSettings?.textPosition || 'middle',
+        // Include the checkbox states
+        showText: shape.toolSettings?.showText ?? false,
+        showFill: shape.toolSettings?.showFill ?? true,
+        showBorder: shape.toolSettings?.showBorder ?? true,
+        showShadow: shape.toolSettings?.showShadow ?? false
+      }
     )
-
-    // Restore tool settings
-    toolStore.rectangleBorderStyle = oldBorderStyle
-    toolStore.rectangleFillChar = oldFillChar
-    toolStore.rectangleShadow = oldShadow
 
     // Update shape data
     shape.data.clear()
@@ -316,6 +313,78 @@ export function useShapeManipulation() {
     }
   }
 
+  // Update image during resize - images maintain their aspect ratio and content
+  const updateImageResize = (shape: Shape, deltaX: number, deltaY: number, originalBounds: ShapeBounds) => {
+    // For images, we scale the content proportionally
+    // Images can only be resized from corners to maintain aspect ratio
+    const originalWidth = originalBounds.maxX - originalBounds.minX + 1
+    const originalHeight = originalBounds.maxY - originalBounds.minY + 1
+    
+    let newMinX = originalBounds.minX
+    let newMaxX = originalBounds.maxX
+    let newMinY = originalBounds.minY
+    let newMaxY = originalBounds.maxY
+    
+    // Only allow corner resizing for images to maintain aspect ratio
+    switch (shapeResizeState.anchor) {
+      case 'topLeft':
+        newMinX = originalBounds.minX + deltaX
+        newMinY = originalBounds.minY + deltaY
+        break
+      case 'topRight':
+        newMaxX = originalBounds.maxX + deltaX
+        newMinY = originalBounds.minY + deltaY
+        break
+      case 'bottomLeft':
+        newMinX = originalBounds.minX + deltaX
+        newMaxY = originalBounds.maxY + deltaY
+        break
+      case 'bottomRight':
+        newMaxX = originalBounds.maxX + deltaX
+        newMaxY = originalBounds.maxY + deltaY
+        break
+      default:
+        // Don't allow edge resizing for images
+        return
+    }
+    
+    // Ensure minimum size
+    if (newMaxX <= newMinX) newMaxX = newMinX + 1
+    if (newMaxY <= newMinY) newMaxY = newMinY + 1
+    
+    // Get the original text content
+    const originalText = shape.toolSettings?.originalText || ''
+    const lines = originalText.split('\n')
+    
+    // Calculate scaling factors
+    const newWidth = newMaxX - newMinX + 1
+    const newHeight = newMaxY - newMinY + 1
+    const scaleX = newWidth / originalWidth
+    const scaleY = newHeight / originalHeight
+    
+    // Recreate the image data at the new size
+    // For simplicity, we'll use nearest-neighbor scaling
+    shape.data.clear()
+    
+    for (let y = 0; y < newHeight; y++) {
+      for (let x = 0; x < newWidth; x++) {
+        // Map back to original coordinates
+        const origY = Math.floor(y / scaleY)
+        const origX = Math.floor(x / scaleX)
+        
+        if (origY < lines.length && origX < lines[origY].length) {
+          const char = lines[origY][origX]
+          if (char && char !== ' ') {
+            const gridX = newMinX + x
+            const gridY = newMinY + y
+            const key = gridKey(gridX, gridY)
+            shape.data.set(key, char)
+          }
+        }
+      }
+    }
+  }
+
   // Regenerate shape data with current tool settings
   const regenerateShapeData = (shape: Shape) => {
     if (shape.type === 'rectangle') {
@@ -330,15 +399,15 @@ export function useShapeManipulation() {
         {
           borderStyle: shape.toolSettings?.borderStyle || 'single',
           fillChar: shape.toolSettings?.fillChar ?? '',
-          shadow: shape.toolSettings?.shadow || false,
+          shadow: shape.toolSettings?.shadow ?? false,
           text: shape.toolSettings?.text ?? '',
           textAlign: shape.toolSettings?.textAlign || 'center',
           textPosition: shape.toolSettings?.textPosition || 'middle',
-          // Include the checkbox states
-          showText: shape.toolSettings?.showText,
-          showFill: shape.toolSettings?.showFill,
-          showBorder: shape.toolSettings?.showBorder,
-          showShadow: shape.toolSettings?.showShadow
+          // Include the checkbox states - these control whether features are rendered
+          showText: shape.toolSettings?.showText ?? false,
+          showFill: shape.toolSettings?.showFill ?? true,
+          showBorder: shape.toolSettings?.showBorder ?? true,
+          showShadow: shape.toolSettings?.showShadow ?? false
         }
       )
 
@@ -410,8 +479,7 @@ export function useShapeManipulation() {
       shapeDragState.offsetX = 0
       shapeDragState.offsetY = 0
       
-      // Save the new shape position to storage
-      layersStore.saveToStorage()
+      // shapesStore handles saving automatically - no need to call saveToStorage()
     }
   }
 
@@ -425,8 +493,7 @@ export function useShapeManipulation() {
       shapeResizeState.startMouseX = 0
       shapeResizeState.startMouseY = 0
       
-      // Save the new shape size to storage
-      layersStore.saveToStorage()
+      // shapesStore handles saving automatically - no need to call saveToStorage()
     }
   }
 

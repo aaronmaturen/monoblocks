@@ -1,6 +1,6 @@
 import { useCoordinateSystem } from '../canvas/useCoordinateSystem'
 import { useSelection } from '../interaction/useSelection'
-import { useLayersStore } from '../../stores/layers'
+import { useShapesStore } from '../../stores/shapes'
 import { useToolStore, RECTANGLE_BORDER_STYLES, LINE_STYLES } from '../../stores/tools'
 import { useColorStore } from '../../stores/colors'
 import type { DrawingToolState } from '../drawing/useDrawingTools'
@@ -21,7 +21,7 @@ export function useRenderPipeline(
 ) {
   const { worldToGrid, gridToWorld, gridKey, gridWidth, gridHeight } = useCoordinateSystem()
   const { drawSelectionHighlight } = useSelection()
-  const layersStore = useLayersStore()
+  const shapesStore = useShapesStore()
   const toolStore = useToolStore()
   const colorStore = useColorStore()
 
@@ -57,8 +57,8 @@ export function useRenderPipeline(
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     
-    // Get all visible shapes from layers
-    const visibleShapes = layersStore.getAllVisibleShapes()
+    // Get all visible shapes from shapesStore and sort by zOrder (lowest first, so they render bottom to top)
+    const visibleShapes = shapesStore.getAllVisibleShapes().sort((a, b) => a.zOrder - b.zOrder)
     
     // Draw characters from all visible shapes
     for (let gridX = startGridX; gridX <= endGridX; gridX++) {
@@ -73,7 +73,24 @@ export function useRenderPipeline(
           const character = shape.data.get(key)
           if (character && character !== '') {
             characterToDraw = character
-            colorToDraw = shape.color
+            
+            // Determine which color to use based on character type
+            // Box-drawing characters (borders)
+            if (/[┌┐└┘─│═║╔╗╚╝╭╮╰╯┏┓┗┛━┃╌╎]/.test(character)) {
+              colorToDraw = shape.borderColor || shape.color
+            }
+            // Shade/block characters (fill)
+            else if (/[░▒▓█▄▀▌▐]/.test(character)) {
+              colorToDraw = shape.fillColor || shape.color
+            }
+            // Shadow characters
+            else if (character === '▓') {
+              colorToDraw = '#808080' // Gray shadow
+            }
+            // Everything else is text
+            else {
+              colorToDraw = shape.textColor || shape.color
+            }
           }
         }
         
@@ -121,6 +138,98 @@ export function useRenderPipeline(
       ctx.lineTo(bottomRight.x + gridWidth, y)
       ctx.stroke()
     }
+  }
+
+  const drawDiamondPreview = (ctx: CanvasRenderingContext2D, diamondState: DrawingToolState) => {
+    if (!diamondState || !diamondState.isDrawing || toolStore.currentTool !== 'diamond') {
+      return
+    }
+    
+    // Use callbacks if provided, otherwise use local functions
+    const toGrid = callbacks.worldToGrid || worldToGrid
+    const toWorld = callbacks.gridToWorld || gridToWorld
+    
+    const startGrid = toGrid(diamondState.startX, diamondState.startY)
+    const endGrid = toGrid(diamondState.endX, diamondState.endY)
+    
+    // Ensure we have proper min/max coordinates
+    const minX = Math.min(startGrid.x, endGrid.x)
+    const maxX = Math.max(startGrid.x, endGrid.x)
+    const minY = Math.min(startGrid.y, endGrid.y)
+    const maxY = Math.max(startGrid.y, endGrid.y)
+    
+    const width = maxX - minX + 1
+    const height = maxY - minY + 1
+    
+    // Calculate center point - for odd widths, this gives us the true center
+    const centerX = Math.floor((minX + maxX) / 2)
+    const centerY = Math.floor((minY + maxY) / 2)
+    
+    // Get preview settings
+    const fillChar = toolStore.diamondFillChar || ''
+    const showBorder = toolStore.diamondShowBorder !== false
+    const showFill = toolStore.diamondShowFill && fillChar
+    
+    // Draw diamond preview
+    ctx.globalAlpha = 0.5 // Make preview semi-transparent (consistent with rectangle)
+    ctx.fillStyle = colorStore.selectedColor.hex
+    const fontSize = gridHeight * 0.7 // Use same font size calculation as rectangle
+    ctx.font = `${fontSize}px monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    
+    // Draw the diamond shape
+    const halfHeight = Math.floor(height / 2)
+    
+    for (let y = minY; y <= maxY; y++) {
+      const relY = y - minY
+      
+      // Calculate how many characters from center to edge at this row
+      let distFromCenter
+      
+      if (relY <= halfHeight) {
+        // Top half (including middle) - distance increases as we go down
+        distFromCenter = relY
+      } else {
+        // Bottom half - distance decreases as we go down  
+        distFromCenter = height - relY - 1
+      }
+      
+      // Calculate actual x positions for the edges
+      const leftX = centerX - distFromCenter
+      const rightX = centerX + distFromCenter
+      
+      // Draw the diamond edges and fill
+      if (showBorder) {
+        // Draw left edge
+        const worldPosLeft = toWorld(leftX, y)
+        if (relY <= halfHeight) {
+          ctx.fillText('/', worldPosLeft.x, worldPosLeft.y)
+        } else {
+          ctx.fillText('\\', worldPosLeft.x, worldPosLeft.y)
+        }
+        
+        // Draw right edge (only if not the same as left - for top/bottom points)
+        if (leftX !== rightX) {
+          const worldPosRight = toWorld(rightX, y)
+          if (relY <= halfHeight) {
+            ctx.fillText('\\', worldPosRight.x, worldPosRight.y)
+          } else {
+            ctx.fillText('/', worldPosRight.x, worldPosRight.y)
+          }
+        }
+      }
+      
+      // Fill interior if needed
+      if (showFill) {
+        for (let x = leftX + 1; x < rightX; x++) {
+          const worldPos = toWorld(x, y)
+          ctx.fillText(fillChar, worldPos.x, worldPos.y)
+        }
+      }
+    }
+    
+    ctx.globalAlpha = 1
   }
 
   const drawRectanglePreview = (ctx: CanvasRenderingContext2D, rectangleState: DrawingToolState) => {
@@ -306,25 +415,124 @@ export function useRenderPipeline(
       const worldPos = toWorld(startGrid.x, startGrid.y)
       ctx.fillText('•', worldPos.x, worldPos.y)
     } else {
+      // Calculate angle to determine the best character to use
+      const angle = Math.atan2(dy, dx) * (180 / Math.PI)
+      const absAngle = Math.abs(angle)
+      
       // Draw line
       for (let i = 0; i <= distance; i++) {
         const progress = i / distance
         const x = Math.round(startGrid.x + dx * progress)
         const y = Math.round(startGrid.y + dy * progress)
         
-        let character = lineStyle.horizontal
-        if (Math.abs(dx) > Math.abs(dy)) {
-          character = lineStyle.horizontal
-        } else if (Math.abs(dy) > Math.abs(dx)) {
-          character = lineStyle.vertical
-        } else {
-          character = lineStyle.diagonal1 || lineStyle.horizontal
+        let character = '-' // Default to horizontal
+        
+        // Select character based on angle
+        // Horizontal: -22.5° to 22.5° or 157.5° to 180° or -180° to -157.5°
+        if ((absAngle <= 22.5) || (absAngle >= 157.5)) {
+          character = lineStyle.horizontal || '-'
+        }
+        // Vertical: 67.5° to 112.5° or -112.5° to -67.5°
+        else if ((absAngle >= 67.5) && (absAngle <= 112.5)) {
+          character = lineStyle.vertical || '|'
+        }
+        // Forward slash: 112.5° to 157.5° or -67.5° to -22.5°
+        // This is for lines going from bottom-left to top-right
+        else if ((angle > 112.5 && angle <= 157.5) || (angle > -67.5 && angle <= -22.5)) {
+          character = lineStyle.diagonal1 || '/'
+        }
+        // Backslash: 22.5° to 67.5° or -157.5° to -112.5°
+        // This is for lines going from top-left to bottom-right
+        else if ((angle >= 22.5 && angle < 67.5) || (angle >= -157.5 && angle < -112.5)) {
+          character = lineStyle.diagonal2 || '\\'
         }
         
         const worldPos = toWorld(x, y)
         ctx.fillText(character, worldPos.x, worldPos.y)
       }
     }
+    
+    ctx.globalAlpha = 1 // Reset alpha
+  }
+
+  // Draw the in-progress brush stroke
+  const drawCurrentBrushStroke = (ctx: CanvasRenderingContext2D, currentStrokeData: Map<string, string>) => {
+    if (!currentStrokeData || currentStrokeData.size === 0) return
+    
+    // Set up text rendering for the stroke
+    const fontSize = gridHeight * 0.7
+    ctx.font = `${fontSize}px monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = colorStore.selectedColor.hex
+    ctx.globalAlpha = 0.8 // Slightly transparent to show it's in progress
+    
+    // Draw all characters in the current stroke
+    for (const [key, character] of currentStrokeData) {
+      const [gridX, gridY] = key.split(',').map(Number)
+      const worldPos = gridToWorld(gridX, gridY)
+      ctx.fillText(character, worldPos.x, worldPos.y)
+    }
+    
+    ctx.globalAlpha = 1 // Reset alpha
+  }
+
+  // Track last mouse position for brush stroke preview
+  let lastBrushPreviewPos: { x: number, y: number } | null = null
+
+  const drawBrushPreview = (ctx: CanvasRenderingContext2D, mouseWorldX: number, mouseWorldY: number) => {
+    if (toolStore.currentTool !== 'brush') {
+      lastBrushPreviewPos = null
+      return
+    }
+    
+    // Use callbacks if provided, otherwise use local functions
+    const toGrid = callbacks.worldToGrid || worldToGrid
+    const toWorld = callbacks.gridToWorld || gridToWorld
+    
+    // Convert mouse position to grid coordinates
+    const currentGridPos = toGrid(mouseWorldX, mouseWorldY)
+    
+    // Set up text rendering for preview
+    const fontSize = gridHeight * 0.7
+    ctx.font = `${fontSize}px monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    
+    // Draw preview of the selected character at mouse position
+    ctx.fillStyle = colorStore.selectedColor.hex
+    ctx.globalAlpha = 0.3 // Make preview semi-transparent
+    
+    // If we have a previous position, interpolate between positions
+    if (lastBrushPreviewPos) {
+      // Calculate line between last and current position
+      const dx = currentGridPos.x - lastBrushPreviewPos.x
+      const dy = currentGridPos.y - lastBrushPreviewPos.y
+      const distance = Math.max(Math.abs(dx), Math.abs(dy))
+      
+      // Draw characters along the interpolated path
+      if (distance > 0) {
+        for (let i = 0; i <= distance; i++) {
+          const progress = i / distance
+          const x = Math.round(lastBrushPreviewPos.x + dx * progress)
+          const y = Math.round(lastBrushPreviewPos.y + dy * progress)
+          
+          const worldPos = toWorld(x, y)
+          ctx.fillText(toolStore.selectedCharacter, worldPos.x, worldPos.y)
+        }
+      } else {
+        // Just draw at current position if no movement
+        const worldPos = toWorld(currentGridPos.x, currentGridPos.y)
+        ctx.fillText(toolStore.selectedCharacter, worldPos.x, worldPos.y)
+      }
+    } else {
+      // No previous position, just draw at current position
+      const worldPos = toWorld(currentGridPos.x, currentGridPos.y)
+      ctx.fillText(toolStore.selectedCharacter, worldPos.x, worldPos.y)
+    }
+    
+    // Update last position
+    lastBrushPreviewPos = { x: currentGridPos.x, y: currentGridPos.y }
     
     ctx.globalAlpha = 1 // Reset alpha
   }
@@ -339,8 +547,12 @@ export function useRenderPipeline(
 
   const render = (
     rectangleState?: DrawingToolState, 
+    diamondState?: DrawingToolState,
     lineState?: DrawingToolState, 
-    textState?: DrawingToolState
+    textState?: DrawingToolState,
+    mouseWorldX?: number,
+    mouseWorldY?: number,
+    currentStrokeData?: Map<string, string>
   ) => {
     if (canvas.width === 0 || canvas.height === 0) {
       console.warn('[RenderPipeline] Canvas has zero dimensions, skipping render')
@@ -370,6 +582,11 @@ export function useRenderPipeline(
       drawRectanglePreview(ctx, rectangleState)
     }
     
+    // Draw diamond preview if drawing
+    if (diamondState) {
+      drawDiamondPreview(ctx, diamondState)
+    }
+    
     // Draw line preview if drawing
     if (lineState) {
       drawLinePreview(ctx, lineState)
@@ -378,6 +595,16 @@ export function useRenderPipeline(
     // Draw text preview if drawing
     if (textState) {
       drawTextPreview(ctx, textState)
+    }
+    
+    // Draw current brush stroke if in progress
+    if (currentStrokeData && currentStrokeData.size > 0) {
+      drawCurrentBrushStroke(ctx, currentStrokeData)
+    }
+    
+    // Draw brush preview at mouse position (only if not currently drawing)
+    if (mouseWorldX !== undefined && mouseWorldY !== undefined && (!currentStrokeData || currentStrokeData.size === 0)) {
+      drawBrushPreview(ctx, mouseWorldX, mouseWorldY)
     }
     
     // Draw selection highlight
@@ -415,8 +642,10 @@ export function useRenderPipeline(
     
     // Preview rendering functions  
     drawRectanglePreview,
+    drawDiamondPreview,
     drawLinePreview,
     drawTextPreview,
+    drawBrushPreview,
     
     // Canvas management
     resizeCanvas,

@@ -1,5 +1,5 @@
 import { useCoordinateSystem } from '../canvas/useCoordinateSystem'
-import { useLayersStore } from '../../stores/layers'
+import { useShapesStore } from '../../stores/shapes'
 import { useToastStore } from '../../stores/toast'
 
 export interface ClipboardCallbacks {
@@ -8,14 +8,17 @@ export interface ClipboardCallbacks {
   getCameraPosition?: () => { x: number, y: number }
 }
 
+// Track if paste listener is already registered to prevent duplicates
+let pasteListenerRegistered = false
+
 export function useClipboard(callbacks: ClipboardCallbacks = {}) {
   const { worldToGrid, gridToWorld, gridKey, gridWidth, gridHeight } = useCoordinateSystem()
-  const layersStore = useLayersStore()
+  const shapesStore = useShapesStore()
   const toastStore = useToastStore()
 
   const copyToClipboard = () => {
     // Get all visible shapes to find content bounds
-    const visibleShapes = layersStore.getAllVisibleShapes()
+    const visibleShapes = shapesStore.getAllVisibleShapes()
     
     // Find the bounding box of all content
     let minX = Infinity
@@ -115,14 +118,20 @@ export function useClipboard(callbacks: ClipboardCallbacks = {}) {
       }
     }
     
-    // Add the pasted content as a new shape
+    // Add the pasted content as a new "image" shape
+    // Image shapes are special - they can only be moved and resized, not edited
     if (pasteData.size > 0) {
-      layersStore.addShape('brush', pasteData, '#000000', undefined, {
-        character: '' // This is for pasted content, so no specific character
+      const newShape = shapesStore.addShape('image', pasteData, '#000000', 'Pasted Image', {
+        originalText: pastedText,
+        isReadOnly: true,
+        width: Math.max(...lines.map(l => l.length)),
+        height: lines.length
       })
-      layersStore.saveToStorage()
       
-      toastStore.showToast('Content pasted!', 'success')
+      // Auto-select the pasted shape
+      shapesStore.selectShape(newShape.id)
+      
+      toastStore.showToast('Image pasted! You can move or resize it.', 'success')
       
       // Re-render canvas
       callbacks.onRender?.()
@@ -130,16 +139,21 @@ export function useClipboard(callbacks: ClipboardCallbacks = {}) {
   }
 
   const setupClipboardListeners = () => {
-    window.addEventListener('paste', handlePaste)
+    // Only register if not already registered
+    if (!pasteListenerRegistered) {
+      window.addEventListener('paste', handlePaste)
+      pasteListenerRegistered = true
+    }
     
     return () => {
       window.removeEventListener('paste', handlePaste)
+      pasteListenerRegistered = false
     }
   }
 
   const exportToClipboardAsImage = (canvas: HTMLCanvasElement) => {
     // Get all visible shapes to find content bounds
-    const visibleShapes = layersStore.getAllVisibleShapes()
+    const visibleShapes = shapesStore.getAllVisibleShapes()
     
     // Find the bounding box of all content
     let minX = Infinity

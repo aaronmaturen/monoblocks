@@ -4,11 +4,10 @@ import { useDrawingTools, type DrawingToolState } from '../drawing/useDrawingToo
 import { useSelection } from './useSelection'
 import { useToolStore } from '../../stores/tools'
 import { useColorStore } from '../../stores/colors'
-import { useLayersStore } from '../../stores/layers'
+import { useShapesStore } from '../../stores/shapes'
 
 export interface MouseEventCallbacks {
   onRender?: () => void
-  onShowTextInput?: (screenX: number, screenY: number) => void
   screenToWorld?: (screenX: number, screenY: number) => { x: number, y: number }
   worldToScreen?: (worldX: number, worldY: number) => { x: number, y: number }
 }
@@ -37,26 +36,29 @@ export function useMouseEvents(
   callbacks: MouseEventCallbacks = {},
   drawingStates?: {
     rectangleState: DrawingToolState,
+    diamondState: DrawingToolState,
     lineState: DrawingToolState,
     textState: DrawingToolState,
     currentStrokeData: Map<string, string>,
     placeCharacter: (worldX: number, worldY: number, character: string) => void,
     eraseAtPosition: (worldX: number, worldY: number, layers: any[]) => void,
     drawRectangle: (startX: number, startY: number, endX: number, endY: number) => Map<string, string>,
-    drawLine: (startX: number, startY: number, endX: number, endY: number) => Map<string, string>
+    drawDiamond: (startX: number, startY: number, endX: number, endY: number) => Map<string, string>,
+    drawLine: (startX: number, startY: number, endX: number, endY: number) => Map<string, string>,
+    resetBrushTracking?: () => void
   }
 ) {
-  const { worldToGrid, gridKey } = useCoordinateSystem()
+  const { worldToGrid, gridToWorld, gridKey } = useCoordinateSystem()
   
   // Use provided drawing states or create new ones
   const drawingTools = drawingStates || useDrawingTools()
-  const { rectangleState, lineState, textState, currentStrokeData, placeCharacter, eraseAtPosition, drawRectangle, drawLine } = drawingTools
+  const { rectangleState, diamondState, lineState, textState, currentStrokeData, placeCharacter, eraseAtPosition, drawRectangle, drawDiamond, drawLine } = drawingTools
   
   const { getShapeBounds, getAnchorAtPosition, checkShapeAtPosition, handleShapeSelection, getAnchorCursor } = useSelection()
   
   const toolStore = useToolStore()
   const colorStore = useColorStore()
-  const layersStore = useLayersStore()
+  const shapesStore = useShapesStore()
 
   // Track if we're in a brush stroke to save state once per stroke
   let brushStrokeStarted = false
@@ -92,6 +94,11 @@ export function useMouseEvents(
       currentStrokeData.clear()
       brushStrokeStarted = true
       
+      // Reset brush tracking for new stroke
+      if (drawingStates && drawingStates.resetBrushTracking) {
+        drawingStates.resetBrushTracking()
+      }
+      
       mouse.isDragging = true
       // Place character at click position
       if (callbacks.screenToWorld) {
@@ -104,7 +111,7 @@ export function useMouseEvents(
       // Erase character at click position
       if (callbacks.screenToWorld) {
         const worldPos = callbacks.screenToWorld(e.clientX, e.clientY)
-        eraseAtPosition(worldPos.x, worldPos.y, layersStore.layers)
+        eraseAtPosition(worldPos.x, worldPos.y, shapesStore.getAllShapes())
         callbacks.onRender?.()
       }
     } else if (toolStore.currentTool === 'eyedropper') {
@@ -115,10 +122,10 @@ export function useMouseEvents(
       if (callbacks.screenToWorld) {
         const worldPos = callbacks.screenToWorld(e.clientX, e.clientY)
         const grid = worldToGrid(worldPos.x, worldPos.y)
-        const selectedShape = layersStore.getSelectedShape()
+        const selectedShape = shapesStore.getSelectedShape()
         
         // Check if clicking on a resize anchor
-        if (selectedShape && (selectedShape.type === 'rectangle' || selectedShape.type === 'line' || selectedShape.type === 'text')) {
+        if (selectedShape && (selectedShape.type === 'rectangle' || selectedShape.type === 'line' || selectedShape.type === 'text' || selectedShape.type === 'diamond')) {
           const anchor = getAnchorAtPosition(grid.x, grid.y, selectedShape)
           if (anchor) {
             // Start resizing
@@ -135,9 +142,9 @@ export function useMouseEvents(
         }
         
         // Check if clicking on a shape
-        const shape = checkShapeAtPosition(grid.x, grid.y, layersStore.getAllVisibleShapes())
+        const shape = checkShapeAtPosition(grid.x, grid.y, shapesStore.getAllVisibleShapes())
         const isMultiSelect = e.shiftKey
-        const selectedShapes = layersStore.getSelectedShapes()
+        const selectedShapes = shapesStore.getSelectedShapes()
         
         // Check if clicking on any selected shape (to start dragging)
         if (shape && selectedShapes.some(s => s.id === shape.id) && !isMultiSelect) {
@@ -173,6 +180,17 @@ export function useMouseEvents(
         rectangleState.isDrawing = true
         mouse.isDragging = true
       }
+    } else if (toolStore.currentTool === 'diamond') {
+      // Start diamond drawing
+      if (callbacks.screenToWorld) {
+        const worldPos = callbacks.screenToWorld(e.clientX, e.clientY)
+        diamondState.startX = worldPos.x
+        diamondState.startY = worldPos.y
+        diamondState.endX = worldPos.x
+        diamondState.endY = worldPos.y
+        diamondState.isDrawing = true
+        mouse.isDragging = true
+      }
     } else if (toolStore.currentTool === 'line') {
       // Start line drawing
       if (callbacks.screenToWorld) {
@@ -202,13 +220,18 @@ export function useMouseEvents(
     mouse.x = e.clientX
     mouse.y = e.clientY
     
+    // Trigger render for brush preview when not dragging
+    if (!mouse.isDragging && toolStore.currentTool === 'brush') {
+      callbacks.onRender?.()
+    }
+    
     // Update cursor for select tool when hovering over selected shape or anchors
     if (!mouse.isDragging && !shapeResizeState.isResizing && toolStore.currentTool === 'select' && callbacks.screenToWorld) {
       const worldPos = callbacks.screenToWorld(e.clientX, e.clientY)
       const grid = worldToGrid(worldPos.x, worldPos.y)
-      const selectedShape = layersStore.getSelectedShape()
+      const selectedShape = shapesStore.getSelectedShape()
       
-      if (selectedShape && (selectedShape.type === 'rectangle' || selectedShape.type === 'line' || selectedShape.type === 'text')) {
+      if (selectedShape && (selectedShape.type === 'rectangle' || selectedShape.type === 'line' || selectedShape.type === 'text' || selectedShape.type === 'image' || selectedShape.type === 'diamond')) {
         const anchor = getAnchorAtPosition(grid.x, grid.y, selectedShape)
         if (anchor) {
           canvas.style.cursor = getAnchorCursor(anchor)
@@ -217,7 +240,7 @@ export function useMouseEvents(
       }
       
       // Check if hovering over a shape
-      const shape = checkShapeAtPosition(grid.x, grid.y, layersStore.getAllVisibleShapes())
+      const shape = checkShapeAtPosition(grid.x, grid.y, shapesStore.getAllVisibleShapes())
       if (shape) {
         canvas.style.cursor = 'move'
         return
@@ -245,13 +268,29 @@ export function useMouseEvents(
     } else if (mouse.isDragging && toolStore.currentTool === 'eraser' && callbacks.screenToWorld) {
       // Continue erasing while dragging
       const worldPos = callbacks.screenToWorld(e.clientX, e.clientY)
-      eraseAtPosition(worldPos.x, worldPos.y, layersStore.layers)
+      eraseAtPosition(worldPos.x, worldPos.y, shapesStore.getAllShapes())
       callbacks.onRender?.()
     } else if (mouse.isDragging && toolStore.currentTool === 'rectangle' && rectangleState.isDrawing && callbacks.screenToWorld) {
       // Update rectangle end position while dragging
       const worldPos = callbacks.screenToWorld(e.clientX, e.clientY)
       rectangleState.endX = worldPos.x
       rectangleState.endY = worldPos.y
+      callbacks.onRender?.()
+    } else if (mouse.isDragging && toolStore.currentTool === 'diamond' && diamondState.isDrawing && callbacks.screenToWorld) {
+      // Update diamond end position while dragging - enforce 1:1 aspect ratio
+      const worldPos = callbacks.screenToWorld(e.clientX, e.clientY)
+      
+      // Calculate the distance from start in both dimensions
+      const deltaX = worldPos.x - diamondState.startX
+      const deltaY = worldPos.y - diamondState.startY
+      
+      // Use the larger absolute delta to maintain square/diamond shape
+      const maxDelta = Math.max(Math.abs(deltaX), Math.abs(deltaY))
+      
+      // Apply the same distance in both dimensions, preserving the sign
+      diamondState.endX = diamondState.startX + (deltaX >= 0 ? maxDelta : -maxDelta)
+      diamondState.endY = diamondState.startY + (deltaY >= 0 ? maxDelta : -maxDelta)
+      
       callbacks.onRender?.()
     } else if (mouse.isDragging && toolStore.currentTool === 'line' && lineState.isDrawing && callbacks.screenToWorld) {
       // Update line end position while dragging
@@ -269,7 +308,7 @@ export function useMouseEvents(
       // Resize the selected shape
       const worldPos = callbacks.screenToWorld(e.clientX, e.clientY)
       const grid = worldToGrid(worldPos.x, worldPos.y)
-      const selectedShape = layersStore.getSelectedShape()
+      const selectedShape = shapesStore.getSelectedShape()
       
       if (selectedShape && shapeResizeState.originalBounds) {
         const deltaX = grid.x - shapeResizeState.startMouseX
@@ -319,11 +358,79 @@ export function useMouseEvents(
           if (newMaxY <= newMinY) newMaxY = newMinY + 1
           
           // Regenerate rectangle with new bounds
+          // Use proper gridToWorld conversion
+          const startWorld = gridToWorld(newMinX, newMinY)
+          const endWorld = gridToWorld(newMaxX, newMaxY)
           const newRectangleData = drawRectangle(
-            newMinX * 10 + 5, newMinY * 20 + 10, // Convert to world coordinates
-            newMaxX * 10 + 5, newMaxY * 20 + 10
+            startWorld.x, startWorld.y,
+            endWorld.x, endWorld.y
           )
           selectedShape.data = newRectangleData
+          
+          callbacks.onRender?.()
+        } else if (selectedShape.type === 'diamond') {
+          // For diamonds, we only handle edge anchors and maintain 1:1 aspect ratio
+          let newMinX = originalBounds.minX
+          let newMaxX = originalBounds.maxX
+          let newMinY = originalBounds.minY
+          let newMaxY = originalBounds.maxY
+          
+          const centerX = Math.round((originalBounds.minX + originalBounds.maxX) / 2)
+          const centerY = Math.round((originalBounds.minY + originalBounds.maxY) / 2)
+          
+          switch (shapeResizeState.anchor) {
+            case 'left':
+              // Moving left edge - adjust both X and Y to maintain square
+              newMinX = originalBounds.minX + deltaX
+              const leftDist = centerX - newMinX
+              newMaxX = centerX + leftDist
+              newMinY = centerY - leftDist
+              newMaxY = centerY + leftDist
+              break
+            case 'right':
+              // Moving right edge - adjust both X and Y to maintain square
+              newMaxX = originalBounds.maxX + deltaX
+              const rightDist = newMaxX - centerX
+              newMinX = centerX - rightDist
+              newMinY = centerY - rightDist
+              newMaxY = centerY + rightDist
+              break
+            case 'top':
+              // Moving top edge - adjust both X and Y to maintain square
+              newMinY = originalBounds.minY + deltaY
+              const topDist = centerY - newMinY
+              newMaxY = centerY + topDist
+              newMinX = centerX - topDist
+              newMaxX = centerX + topDist
+              break
+            case 'bottom':
+              // Moving bottom edge - adjust both X and Y to maintain square
+              newMaxY = originalBounds.maxY + deltaY
+              const bottomDist = newMaxY - centerY
+              newMinY = centerY - bottomDist
+              newMinX = centerX - bottomDist
+              newMaxX = centerX + bottomDist
+              break
+          }
+          
+          // Ensure minimum size
+          if (newMaxX <= newMinX) {
+            newMaxX = newMinX + 1
+            newMaxY = newMinY + 1
+          }
+          if (newMaxY <= newMinY) {
+            newMaxY = newMinY + 1
+            newMaxX = newMinX + 1
+          }
+          
+          // Regenerate diamond with new bounds
+          const startWorld = gridToWorld(newMinX, newMinY)
+          const endWorld = gridToWorld(newMaxX, newMaxY)
+          const newDiamondData = drawDiamond(
+            startWorld.x, startWorld.y,
+            endWorld.x, endWorld.y
+          )
+          selectedShape.data = newDiamondData
           
           callbacks.onRender?.()
         }
@@ -344,7 +451,7 @@ export function useMouseEvents(
         shapeDragState.offsetY = offsetY
         
         // Update all selected shapes' data with the new positions
-        const selectedShapes = layersStore.getSelectedShapes()
+        const selectedShapes = shapesStore.getSelectedShapes()
         for (const selectedShape of selectedShapes) {
           const originalData = shapeDragState.originalData.get(selectedShape.id)
           if (originalData) {
@@ -370,50 +477,153 @@ export function useMouseEvents(
     // Complete rectangle drawing if we were drawing one
     if (rectangleState.isDrawing && toolStore.currentTool === 'rectangle') {
       const rectangleData = drawRectangle(rectangleState.startX, rectangleState.startY, rectangleState.endX, rectangleState.endY)
-      layersStore.addShape('rectangle', rectangleData, colorStore.selectedColor.hex, undefined, {
-        borderStyle: toolStore.rectangleBorderStyle,
-        fillChar: toolStore.rectangleFillChar,
-        shadow: toolStore.rectangleShadow,
-        text: toolStore.rectangleText,
-        textAlign: toolStore.rectangleTextAlign,
-        textPosition: toolStore.rectangleTextPosition
-      })
+      const newShape = shapesStore.addShape(
+        'rectangle', 
+        rectangleData, 
+        colorStore.selectedColor.hex, 
+        undefined, 
+        {
+          borderStyle: toolStore.rectangleBorderStyle,
+          fillChar: toolStore.rectangleFillChar,
+          shadow: toolStore.rectangleShadow,
+          text: toolStore.rectangleText,
+          textAlign: toolStore.rectangleTextAlign,
+          textPosition: toolStore.rectangleTextPosition,
+          showText: toolStore.rectangleShowText,
+          showFill: toolStore.rectangleShowFill,
+          showBorder: toolStore.rectangleShowBorder,
+          showShadow: toolStore.rectangleShowShadow
+        },
+        {
+          borderColor: toolStore.rectangleBorderColor,
+          fillColor: toolStore.rectangleFillColor,
+          textColor: toolStore.rectangleTextColor
+        }
+      )
       rectangleState.isDrawing = false
+      
+      // Switch to select tool and select the new shape
+      toolStore.setTool('select')
+      shapesStore.selectShape(newShape.id)
+      
+      callbacks.onRender?.()
+    }
+    
+    // Complete diamond drawing if we were drawing one
+    if (diamondState.isDrawing && toolStore.currentTool === 'diamond') {
+      const diamondData = drawDiamond(diamondState.startX, diamondState.startY, diamondState.endX, diamondState.endY)
+      const newShape = shapesStore.addShape(
+        'diamond', 
+        diamondData, 
+        colorStore.selectedColor.hex, 
+        undefined, 
+        {
+          borderStyle: toolStore.diamondBorderStyle,
+          fillChar: toolStore.diamondFillChar,
+          shadow: toolStore.diamondShadow,
+          text: toolStore.diamondText,
+          textAlign: toolStore.diamondTextAlign,
+          textPosition: toolStore.diamondTextPosition,
+          showText: toolStore.diamondShowText,
+          showFill: toolStore.diamondShowFill,
+          showBorder: toolStore.diamondShowBorder,
+          showShadow: toolStore.diamondShowShadow,
+          borderColor: toolStore.diamondBorderColor,
+          fillColor: toolStore.diamondFillColor,
+          textColor: toolStore.diamondTextColor
+        }
+      )
+      diamondState.isDrawing = false
+      
+      // Switch to select tool and select the new shape
+      toolStore.setTool('select')
+      shapesStore.selectShape(newShape.id)
+      
       callbacks.onRender?.()
     }
     
     // Complete line drawing if we were drawing one
     if (lineState.isDrawing && toolStore.currentTool === 'line') {
       const lineData = drawLine(lineState.startX, lineState.startY, lineState.endX, lineState.endY)
-      layersStore.addShape('line', lineData, colorStore.selectedColor.hex, undefined, {
+      const newShape = shapesStore.addShape('line', lineData, colorStore.selectedColor.hex, undefined, {
         lineStyle: toolStore.lineStyle,
         lineStartStyle: toolStore.lineStartStyle,
         lineEndStyle: toolStore.lineEndStyle
       })
       lineState.isDrawing = false
+      
+      // Switch to select tool and select the new shape
+      toolStore.setTool('select')
+      shapesStore.selectShape(newShape.id)
+      
       callbacks.onRender?.()
     }
     
-    // Complete text box drawing and show text input dialog
-    if (textState.isDrawing && toolStore.currentTool === 'text' && callbacks.worldToScreen) {
+    // Complete text box drawing - create a rectangle with "TEXT" content
+    if (textState.isDrawing && toolStore.currentTool === 'text') {
+      // Create a rectangle with default "TEXT" content
+      const rectangleData = drawRectangle(textState.startX, textState.startY, textState.endX, textState.endY, {
+        borderStyle: 'single',
+        fillChar: '',
+        shadow: false,
+        text: 'TEXT',
+        textAlign: 'center',
+        textPosition: 'middle',
+        showText: true,
+        showFill: false,
+        showBorder: true,
+        showShadow: false
+      })
+      
+      const newShape = shapesStore.addShape(
+        'rectangle',
+        rectangleData,
+        colorStore.selectedColor.hex,
+        undefined,
+        {
+          borderStyle: 'single',
+          fillChar: '',
+          shadow: false,
+          text: 'TEXT',
+          textAlign: 'center',
+          textPosition: 'middle',
+          showText: true,
+          showFill: false,
+          showBorder: true,
+          showShadow: false
+        },
+        {
+          borderColor: colorStore.selectedColor.hex,
+          textColor: colorStore.selectedColor.hex
+        }
+      )
+      
       textState.isDrawing = false
       
-      // Show text input dialog centered on the text box
-      const centerX = (textState.startX + textState.endX) / 2
-      const centerY = (textState.startY + textState.endY) / 2
-      const screenPos = callbacks.worldToScreen(centerX, centerY)
+      // Switch to select tool and select the new shape
+      toolStore.setTool('select')
+      shapesStore.selectShape(newShape.id)
       
-      callbacks.onShowTextInput?.(screenPos.x, screenPos.y)
       callbacks.onRender?.()
     }
     
     // Complete brush stroke
     if (brushStrokeStarted && toolStore.currentTool === 'brush' && currentStrokeData.size > 0) {
-      layersStore.addShape('brush', currentStrokeData, colorStore.selectedColor.hex, undefined, {
+      const newShape = shapesStore.addShape('brush', currentStrokeData, colorStore.selectedColor.hex, undefined, {
         character: toolStore.selectedCharacter
       })
       currentStrokeData.clear()
-      layersStore.saveToStorage()
+      
+      // Reset brush tracking for next stroke
+      if (drawingStates && drawingStates.resetBrushTracking) {
+        drawingStates.resetBrushTracking()
+      }
+      
+      // Switch to select tool and select the new shape
+      toolStore.setTool('select')
+      shapesStore.selectShape(newShape.id)
+      
+      // shapesStore handles saving automatically - no need to call saveToStorage()
     }
     
     // Complete shape resizing
@@ -426,8 +636,7 @@ export function useMouseEvents(
       shapeResizeState.startMouseX = 0
       shapeResizeState.startMouseY = 0
       
-      // Save the new shape size to storage
-      layersStore.saveToStorage()
+      // shapesStore handles saving automatically - no need to call saveToStorage()
     }
     
     // Complete shape dragging
@@ -439,8 +648,7 @@ export function useMouseEvents(
       shapeDragState.offsetX = 0
       shapeDragState.offsetY = 0
       
-      // Save the new shape positions to storage
-      layersStore.saveToStorage()
+      // shapesStore handles saving automatically - no need to call saveToStorage()
     }
     
     brushStrokeStarted = false

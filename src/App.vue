@@ -9,7 +9,7 @@ import LayersPanel from './components/LayersPanel.vue'
 import TrialPopup from './components/TrialPopup.vue'
 import AboutModal from './components/AboutModal.vue'
 import ToolSettingsPanel from './components/ToolSettingsPanel.vue'
-import TextInput from './components/TextInput.vue'
+// TextInput removed - text tool now creates rectangle with default "TEXT" content
 import CharacterPalette from './components/CharacterPalette.vue'
 import ToastNotification from './components/ToastNotification.vue'
 
@@ -22,7 +22,7 @@ import { useAppStore } from './stores/app'
 // Component refs
 const drawingCanvasRef = ref<InstanceType<typeof DrawingCanvas>>()
 const aboutModalRef = ref<InstanceType<typeof AboutModal>>()
-const textInputRef = ref<InstanceType<typeof TextInput>>()
+// textInputRef removed - text tool functionality changed
 
 // Initialize stores
 const appStore = useAppStore()
@@ -41,6 +41,7 @@ const handleRedo = () => {
 }
 
 const handleReset = () => {
+  console.log('[App] handleReset called, drawingCanvasRef:', drawingCanvasRef.value)
   drawingCanvasRef.value?.resetCanvas()
 }
 
@@ -64,30 +65,13 @@ const handleShapesChanged = () => {
   drawingCanvasRef.value?.render()
 }
 
-const handleShowTextInput = (screenX: number, screenY: number) => {
-  textInputRef.value?.show(screenX, screenY)
-}
-
-const handleTextConfirm = (text: string, x: number, y: number) => {
-  // Get text settings from the tool store
-  const toolStore = useToolStore()
-  const hAlign = toolStore.textHorizontalAlign || 'left'
-  const vAlign = toolStore.textVerticalAlign || 'top'
-  const showBorder = toolStore.textShowBorder ?? true
-  
-  drawingCanvasRef.value?.handleTextConfirm(text, hAlign, vAlign, showBorder)
-}
-
-const handleTextCancel = () => {
-  // Text input was cancelled, no action needed
-}
+// Text input functionality removed - text tool now creates rectangle with default "TEXT" content
 </script>
 
 <template>
   <!-- Main drawing canvas -->
   <DrawingCanvas 
     ref="drawingCanvasRef"
-    @show-text-input="handleShowTextInput"
   />
   
   <!-- UI Components -->
@@ -108,13 +92,7 @@ const handleTextCancel = () => {
   <LayersPanel @shapesChanged="handleShapesChanged" />
   <ToolSettingsPanel />
   
-  <!-- Modal and Input Components -->
-  <TextInput 
-    ref="textInputRef" 
-    @confirm="handleTextConfirm" 
-    @cancel="handleTextCancel" 
-  />
-  
+  <!-- Modal Components -->
   <TrialPopup />
   <AboutModal ref="aboutModalRef" />
   <ToastNotification />
@@ -164,6 +142,7 @@ const handleTextCancel = () => {
   --icon-select: #059669;    /* Green */
   --icon-brush: #f59e0b;     /* Amber */
   --icon-rectangle: #ef4444; /* Red */
+  --icon-diamond: #a855f7;   /* Purple */
   --icon-line: #3b82f6;      /* Blue */
   --icon-text: #8b5cf6;      /* Purple */
   --icon-eraser: #ec4899;    /* Pink */
