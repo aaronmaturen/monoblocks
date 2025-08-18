@@ -261,6 +261,72 @@ const handleDrop = (e: DragEvent, targetType: 'shape' | 'group', targetId: strin
         })
       }
     }
+  } else if (sourceType === 'group') {
+    // Handle group reordering
+    const shapesInGroup = shapesStore.getShapesInGroup(sourceId)
+    
+    if (targetType === 'shape') {
+      // Moving a group relative to a shape
+      const targetShape = shapesStore.getShape(targetId)
+      if (targetShape) {
+        // Get target zOrder
+        let newBaseZOrder = targetShape.zOrder
+        
+        if (position === 'before') {
+          // Place group above target shape
+          newBaseZOrder = targetShape.zOrder + 1
+        } else {
+          // Place group below target shape
+          newBaseZOrder = targetShape.zOrder - shapesInGroup.length
+        }
+        
+        // First, shift other shapes to make room
+        const allShapes = shapesStore.getAllShapes()
+        const minGroupZOrder = Math.min(...shapesInGroup.map(s => s.zOrder))
+        const maxGroupZOrder = Math.max(...shapesInGroup.map(s => s.zOrder))
+        
+        // Shift shapes that will be affected
+        allShapes.forEach(shape => {
+          if (!shapesInGroup.includes(shape)) {
+            if (position === 'before' && shape.zOrder >= newBaseZOrder) {
+              shapesStore.updateShape(shape.id, { zOrder: shape.zOrder + shapesInGroup.length })
+            } else if (position === 'after' && shape.zOrder > newBaseZOrder && shape.zOrder < minGroupZOrder) {
+              shapesStore.updateShape(shape.id, { zOrder: shape.zOrder + shapesInGroup.length })
+            }
+          }
+        })
+        
+        // Update group shapes with new zOrder
+        shapesInGroup.sort((a, b) => a.zOrder - b.zOrder).forEach((shape, index) => {
+          shapesStore.updateShape(shape.id, { zOrder: newBaseZOrder + index })
+        })
+      }
+    } else if (targetType === 'group') {
+      // Moving a group relative to another group
+      const targetGroupShapes = shapesStore.getShapesInGroup(targetId)
+      if (targetGroupShapes.length > 0) {
+        const targetMinZOrder = Math.min(...targetGroupShapes.map(s => s.zOrder))
+        const targetMaxZOrder = Math.max(...targetGroupShapes.map(s => s.zOrder))
+        
+        let newBaseZOrder = position === 'before' ? 
+          targetMaxZOrder + 1 : 
+          targetMinZOrder - shapesInGroup.length
+        
+        // Update group shapes with new zOrder
+        shapesInGroup.sort((a, b) => a.zOrder - b.zOrder).forEach((shape, index) => {
+          shapesStore.updateShape(shape.id, { zOrder: newBaseZOrder + index })
+        })
+      }
+    }
+    
+    // Normalize all zOrders to maintain consistency
+    const allShapes = shapesStore.getAllShapes().sort((a, b) => a.zOrder - b.zOrder)
+    allShapes.forEach((shape, index) => {
+      const newZOrder = index + 1
+      if (shape.zOrder !== newZOrder) {
+        shapesStore.updateShape(shape.id, { zOrder: newZOrder })
+      }
+    })
   }
   
   emit('shapesChanged')

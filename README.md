@@ -1,6 +1,6 @@
 # MonoBlocks Professional™
 
-*Yeah, so uh... this is like, an ASCII art editor or whatever.*
+_Yeah, so uh... this is like, an ASCII art editor or whatever._
 
 ## What the Hell is This?
 
@@ -11,8 +11,9 @@ It's got all these tools and crap for making ASCII art. You know, like back in t
 ## Features That Don't Suck (Too Much)
 
 ### The Tools, Man
+
 - **Pan Tool** - Move stuff around like you're trying to find the stapler that Milton keeps talking about
-- **Brush Tool** - Draw characters one at a time, real tedious-like
+- **Pencil Tool** - Draw characters one at a time, real tedious-like
 - **Rectangle Tool** - Make boxes. Whoa, boxes! Technology!
 - **Line Tool** - Draw lines with arrows and stuff. Pretty neat, I tell you what
 - **Text Tool** - Type words inside boxes because... uh... that's what you do
@@ -21,6 +22,7 @@ It's got all these tools and crap for making ASCII art. You know, like back in t
 - **Eyedropper** - Pick colors like you're at Home Depot but for nerds
 
 ### Other Stuff That's Actually Pretty Cool
+
 - **Dark Mode** - For when you're coding at 3 AM eating Cheetos in your underwear
 - **Layers** - Stack your art like pancakes at IHOP
 - **Undo/Redo** - Because everyone screws up
@@ -31,9 +33,10 @@ It's got all these tools and crap for making ASCII art. You know, like back in t
 ## System Requirements
 
 You need like, a computer or whatever. And one of those web browser thingies:
+
 - Chrome (the one that eats all your RAM)
 - Firefox (the one nobody uses anymore)
-- Safari (if you're one of *those* people)
+- Safari (if you're one of _those_ people)
 - Edge (lol)
 
 ## Installation
@@ -121,6 +124,7 @@ Want to contribute? That's cool, I guess. Just don't break anything. We've got e
 ## Support
 
 If something's broken, try these steps:
+
 1. Refresh the page
 2. Clear your cache
 3. Restart your browser
@@ -137,6 +141,7 @@ This software is provided "as is" without warranty of any kind. If it deletes yo
 Made by Aaron, who probably should have been doing actual work instead.
 
 Special thanks to:
+
 - Coffee (couldn't have done it without you)
 - Stack Overflow (for copy-paste solutions)
 - That one guy who answered my question at 2 AM
@@ -144,14 +149,14 @@ Special thanks to:
 
 ## Final Thoughts
 
-Look, it's an ASCII art editor. It's not gonna cure cancer or solve world hunger. But if you need to draw a picture using text characters for some reason, this'll do it. 
+Look, it's an ASCII art editor. It's not gonna cure cancer or solve world hunger. But if you need to draw a picture using text characters for some reason, this'll do it.
 
 Now if you'll excuse me, I need to go find my red Swingline stapler.
 
 ---
 
-*"Why does it say paper jam when there is no paper jam?" - Every printer ever, and probably this app at some point*
+_"Why does it say paper jam when there is no paper jam?" - Every printer ever, and probably this app at some point_
 
 **MonoBlocks Professional™** - Because Sometimes You Just Need to Draw Stuff with Text
 
-*Brought to you by the letter █ and the number 42*
+_Brought to you by the letter █ and the number 42_

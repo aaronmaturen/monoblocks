@@ -6,11 +6,11 @@ import diamondDefinition from './diamond'
 export function registerAllShapes() {
   shapeRegistry.register(rectangleDefinition)
   shapeRegistry.register(diamondDefinition)
-  
+
   // Add more shapes here as they're implemented:
   // shapeRegistry.register(lineDefinition)
   // shapeRegistry.register(textDefinition)
-  // shapeRegistry.register(brushDefinition)
+  // shapeRegistry.register(pencilDefinition)
 }
 
 // Re-export for convenience

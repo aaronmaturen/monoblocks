@@ -263,7 +263,7 @@ const diamondDefinition: ShapeDefinition = {
     // For regeneration, we need to determine the original bounds
     // Include empty strings (invisible placeholders) but exclude shadow characters
     const positions = Array.from(shape.data.entries())
-      .filter(([key, char]) => (char !== null && char !== undefined && char !== '▓') || char === '')
+      .filter(([key, char]) => char !== null && char !== undefined && char !== '▓')
       .map(([key]) => {
         const [x, y] = key.split(',').map(Number)
         return { x, y }
@@ -299,7 +299,7 @@ const diamondDefinition: ShapeDefinition = {
   getBounds: (shape: ShapeData) => {
     // Include empty strings (invisible placeholders) but exclude shadow characters
     const positions = Array.from(shape.data.entries())
-      .filter(([key, char]) => (char !== null && char !== undefined && char !== '▓') || char === '')
+      .filter(([key, char]) => char !== null && char !== undefined && char !== '▓')
       .map(([key]) => {
         const [x, y] = key.split(',').map(Number)
         return { x, y }

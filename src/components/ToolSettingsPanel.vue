@@ -16,7 +16,7 @@ const hasMultipleShapesSelected = computed(() => selectedShapes.value.length > 1
 
 const toolDisplayNames: Record<string, string> = {
   pan: 'Pan Tool',
-  brush: 'Brush Tool',
+  pencil: 'Pencil Tool',
   rectangle: 'Rectangle Tool',
   diamond: 'Diamond Tool',
   line: 'Line Tool',
@@ -52,7 +52,7 @@ const isEditingShape = computed(() => {
 })
 
 const hasSettings = computed(() => {
-  return ['brush', 'rectangle', 'diamond', 'line', 'text'].includes(activeToolType.value)
+  return ['pencil', 'rectangle', 'diamond', 'line', 'text'].includes(activeToolType.value)
 })
 
 // Hide the entire panel for pan, eraser, eyedropper tools (and select when nothing is selected)
@@ -61,13 +61,13 @@ const showPanel = computed(() => {
   if (toolStore.currentTool === 'pan') return false
   if (toolStore.currentTool === 'eraser') return false
   if (toolStore.currentTool === 'eyedropper') return false
-  
+
   // For select tool, only show if something is selected
   if (toolStore.currentTool === 'select') {
     return selectedShape.value !== null || hasMultipleShapesSelected.value
   }
-  
-  // Show for all other tools (brush, rectangle, diamond, line, text)
+
+  // Show for all other tools (pencil, rectangle, diamond, line, text)
   return true
 })
 
@@ -94,7 +94,7 @@ const updateSetting = (settingName: string, value: any) => {
     // Update the selected shape's settings
     const newSettings = {
       ...selectedShape.value.toolSettings,
-      [settingName]: value
+      [settingName]: value,
     }
     shapesStore.updateShapeSettings(selectedShape.value.id, newSettings)
     // Regenerate the shape with new settings
@@ -102,59 +102,115 @@ const updateSetting = (settingName: string, value: any) => {
   } else {
     // Update the tool store for new shapes based on tool type and setting
     const toolType = activeToolType.value
-    
+
     // Rectangle settings
     if (toolType === 'rectangle') {
       switch (settingName) {
-        case 'borderStyle': toolStore.setRectangleBorderStyle(value); break;
-        case 'fillChar': toolStore.setRectangleFillChar(value); break;
-        case 'showText': toolStore.setRectangleShowText(value); break;
-        case 'text': toolStore.setRectangleText(value); break;
-        case 'textAlign': toolStore.setRectangleTextAlign(value); break;
-        case 'textPosition': toolStore.setRectangleTextPosition(value); break;
-        case 'textColor': toolStore.setRectangleTextColor(value); break;
-        case 'showFill': toolStore.setRectangleShowFill(value); break;
-        case 'showBorder': toolStore.setRectangleShowBorder(value); break;
-        case 'showShadow': toolStore.setRectangleShowShadow(value); break;
-        case 'shadow': toolStore.setRectangleShadow(value); break;
+        case 'borderStyle':
+          toolStore.setRectangleBorderStyle(value)
+          break
+        case 'fillChar':
+          toolStore.setRectangleFillChar(value)
+          break
+        case 'showText':
+          toolStore.setRectangleShowText(value)
+          break
+        case 'text':
+          toolStore.setRectangleText(value)
+          break
+        case 'textAlign':
+          toolStore.setRectangleTextAlign(value)
+          break
+        case 'textPosition':
+          toolStore.setRectangleTextPosition(value)
+          break
+        case 'textColor':
+          toolStore.setRectangleTextColor(value)
+          break
+        case 'showFill':
+          toolStore.setRectangleShowFill(value)
+          break
+        case 'showBorder':
+          toolStore.setRectangleShowBorder(value)
+          break
+        case 'showShadow':
+          toolStore.setRectangleShowShadow(value)
+          break
+        case 'shadow':
+          toolStore.setRectangleShadow(value)
+          break
       }
     }
     // Diamond settings
     else if (toolType === 'diamond') {
       switch (settingName) {
-        case 'borderStyle': toolStore.setDiamondBorderStyle(value); break;
-        case 'fillChar': toolStore.setDiamondFillChar(value); break;
-        case 'showText': toolStore.setDiamondShowText(value); break;
-        case 'text': toolStore.setDiamondText(value); break;
-        case 'textAlign': toolStore.setDiamondTextAlign(value); break;
-        case 'textPosition': toolStore.setDiamondTextPosition(value); break;
-        case 'textColor': toolStore.setDiamondTextColor(value); break;
-        case 'showFill': toolStore.setDiamondShowFill(value); break;
-        case 'showBorder': toolStore.setDiamondShowBorder(value); break;
-        case 'showShadow': toolStore.setDiamondShowShadow(value); break;
-        case 'shadow': toolStore.setDiamondShadow(value); break;
+        case 'borderStyle':
+          toolStore.setDiamondBorderStyle(value)
+          break
+        case 'fillChar':
+          toolStore.setDiamondFillChar(value)
+          break
+        case 'showText':
+          toolStore.setDiamondShowText(value)
+          break
+        case 'text':
+          toolStore.setDiamondText(value)
+          break
+        case 'textAlign':
+          toolStore.setDiamondTextAlign(value)
+          break
+        case 'textPosition':
+          toolStore.setDiamondTextPosition(value)
+          break
+        case 'textColor':
+          toolStore.setDiamondTextColor(value)
+          break
+        case 'showFill':
+          toolStore.setDiamondShowFill(value)
+          break
+        case 'showBorder':
+          toolStore.setDiamondShowBorder(value)
+          break
+        case 'showShadow':
+          toolStore.setDiamondShowShadow(value)
+          break
+        case 'shadow':
+          toolStore.setDiamondShadow(value)
+          break
       }
     }
     // Line settings
     else if (toolType === 'line') {
       switch (settingName) {
-        case 'lineStyle': toolStore.setLineStyle(value); break;
-        case 'lineStartStyle': toolStore.setLineStartStyle(value); break;
-        case 'lineEndStyle': toolStore.setLineEndStyle(value); break;
+        case 'lineStyle':
+          toolStore.setLineStyle(value)
+          break
+        case 'lineStartStyle':
+          toolStore.setLineStartStyle(value)
+          break
+        case 'lineEndStyle':
+          toolStore.setLineEndStyle(value)
+          break
       }
     }
     // Text settings
     else if (toolType === 'text') {
       switch (settingName) {
-        case 'horizontalAlign': toolStore.setTextHorizontalAlign(value); break;
-        case 'verticalAlign': toolStore.setTextVerticalAlign(value); break;
-        case 'showBorder': toolStore.setTextShowBorder(value); break;
+        case 'horizontalAlign':
+          toolStore.setTextHorizontalAlign(value)
+          break
+        case 'verticalAlign':
+          toolStore.setTextVerticalAlign(value)
+          break
+        case 'showBorder':
+          toolStore.setTextShowBorder(value)
+          break
       }
     }
-    // Brush settings
-    else if (toolType === 'brush') {
+    // Pencil settings
+    else if (toolType === 'pencil') {
       if (settingName === 'character') {
-        toolStore.setSelectedCharacter(value);
+        toolStore.setSelectedCharacter(value)
       }
     }
   }
@@ -194,15 +250,15 @@ const textSettings = computed(() => {
   }
 })
 
-// Computed properties for brush settings
-const brushSettings = computed(() => {
-  if (isEditingShape.value && selectedShape.value?.type === 'brush') {
+// Computed properties for pencil settings
+const pencilSettings = computed(() => {
+  if (isEditingShape.value && selectedShape.value?.type === 'pencil') {
     return {
-      character: selectedShape.value.toolSettings?.character || toolStore.selectedCharacter
+      character: selectedShape.value.toolSettings?.character || toolStore.selectedCharacter,
     }
   }
   return {
-    character: toolStore.selectedCharacter
+    character: toolStore.selectedCharacter,
   }
 })
 
@@ -291,7 +347,7 @@ const pendingColorUpdate = ref<((color: string) => void) | null>(null)
 // Handle color selection for different color properties
 const openColorPickerFor = (target: 'border' | 'fill' | 'text' | 'general') => {
   currentColorTarget.value = target
-  
+
   // Set up the pending color update based on target
   if (selectedShape.value) {
     const shapeId = selectedShape.value.id
@@ -342,7 +398,7 @@ const openColorPickerFor = (target: 'border' | 'fill' | 'text' | 'general') => {
         pendingColorUpdate.value = null
     }
   }
-  
+
   // Open the color selector
   if (colorStore.toggleColorSelector) {
     colorStore.toggleColorSelector()
@@ -355,16 +411,19 @@ const openColorPaletteForShape = () => {
 }
 
 // Watch for when color selector is closed with a selection
-watch(() => colorStore.isColorSelectorVisible, (isOpen, wasOpen) => {
-  if (isOpen === false && wasOpen === true) {
-    const updateFn = pendingColorUpdate.value
-    if (updateFn) {
-      // Color selector was just closed, apply the pending update
-      updateFn(colorStore.selectedColor.hex)
-      pendingColorUpdate.value = null
+watch(
+  () => colorStore.isColorSelectorVisible,
+  (isOpen, wasOpen) => {
+    if (isOpen === false && wasOpen === true) {
+      const updateFn = pendingColorUpdate.value
+      if (updateFn) {
+        // Color selector was just closed, apply the pending update
+        updateFn(colorStore.selectedColor.hex)
+        pendingColorUpdate.value = null
+      }
     }
-  }
-})
+  },
+)
 
 const regenerateShape = (shapeId: string) => {
   shapesStore.regenerateShape(shapeId)
@@ -375,21 +434,21 @@ const getShapeDimensions = (shape: any) => {
   if (!shape || !shape.data || shape.data.size === 0) {
     return { width: 0, height: 0 }
   }
-  
+
   const keys = Array.from(shape.data.keys())
-  const coords = keys.map(key => {
+  const coords = keys.map((key) => {
     const [x, y] = (key as string).split(',').map(Number)
     return { x, y }
   })
-  
-  const minX = Math.min(...coords.map(c => c.x))
-  const maxX = Math.max(...coords.map(c => c.x))
-  const minY = Math.min(...coords.map(c => c.y))
-  const maxY = Math.max(...coords.map(c => c.y))
-  
+
+  const minX = Math.min(...coords.map((c) => c.x))
+  const maxX = Math.max(...coords.map((c) => c.x))
+  const minY = Math.min(...coords.map((c) => c.y))
+  const maxY = Math.max(...coords.map((c) => c.y))
+
   return {
     width: maxX - minX + 1,
-    height: maxY - minY + 1
+    height: maxY - minY + 1,
   }
 }
 
@@ -397,28 +456,28 @@ const getShapeDimensions = (shape: any) => {
 const resizeShape = (shapeId: string, newWidth: number, newHeight: number) => {
   const shape = shapesStore.getSelectedShape()
   if (!shape || shape.id !== shapeId) return
-  
+
   // Get current dimensions
   const currentDims = getShapeDimensions(shape)
   if (currentDims.width === 0 || currentDims.height === 0) return
-  
+
   // For rectangles, we need to regenerate with new dimensions
   if (shape.type === 'rectangle') {
     const keys = Array.from(shape.data.keys())
-    const coords = keys.map(key => {
+    const coords = keys.map((key) => {
       const [x, y] = (key as string).split(',').map(Number)
       return { x, y }
     })
-    
-    const minX = Math.min(...coords.map(c => c.x))
-    const minY = Math.min(...coords.map(c => c.y))
-    
+
+    const minX = Math.min(...coords.map((c) => c.x))
+    const minY = Math.min(...coords.map((c) => c.y))
+
     // Convert grid coordinates to world coordinates for the new size
     const startWorldX = minX * 10 + 5
     const startWorldY = minY * 20 + 10
     const endWorldX = (minX + newWidth - 1) * 10 + 5
     const endWorldY = (minY + newHeight - 1) * 20 + 10
-    
+
     // Use the drawRectangle function with the shape's settings
     const newData = drawRectangle(startWorldX, startWorldY, endWorldX, endWorldY, {
       borderStyle: shape.toolSettings?.borderStyle || 'single',
@@ -431,11 +490,11 @@ const resizeShape = (shapeId: string, newWidth: number, newHeight: number) => {
       showText: shape.toolSettings?.showText,
       showFill: shape.toolSettings?.showFill,
       showBorder: shape.toolSettings?.showBorder,
-      showShadow: shape.toolSettings?.showShadow
+      showShadow: shape.toolSettings?.showShadow,
     })
-    
+
     shape.data = newData
-    
+
     // shapesStore handles saving and rendering automatically
   }
 }
@@ -561,9 +620,8 @@ const alignShapes = (
 
         <!-- Tool-specific settings -->
         <div v-if="hasSettings && !hasMultipleShapesSelected" class="settings-section">
-          <!-- Brush Tool Settings -->
-          <div v-if="activeToolType === 'brush'" class="tool-settings">
-
+          <!-- Pencil Tool Settings -->
+          <div v-if="activeToolType === 'pencil'" class="tool-settings">
             <!-- Name field for selected shapes -->
             <div v-if="selectedShape" class="setting-item">
               <label>Name</label>
@@ -639,13 +697,15 @@ const alignShapes = (
                   <input
                     type="number"
                     :value="getShapeDimensions(selectedShape).width"
-                    @change="(e) => {
-                      const newWidth = parseInt((e.target as HTMLInputElement).value)
-                      const height = getShapeDimensions(selectedShape).height
-                      if (newWidth > 0 && selectedShape) {
-                        resizeShape(selectedShape.id, newWidth, height)
+                    @change="
+                      (e) => {
+                        const newWidth = parseInt((e.target as HTMLInputElement).value)
+                        const height = getShapeDimensions(selectedShape).height
+                        if (newWidth > 0 && selectedShape) {
+                          resizeShape(selectedShape.id, newWidth, height)
+                        }
                       }
-                    }"
+                    "
                     min="3"
                     max="100"
                     class="size-input"
@@ -656,13 +716,15 @@ const alignShapes = (
                   <input
                     type="number"
                     :value="getShapeDimensions(selectedShape).height"
-                    @change="(e) => {
-                      const newHeight = parseInt((e.target as HTMLInputElement).value)
-                      const width = getShapeDimensions(selectedShape).width
-                      if (newHeight > 0 && selectedShape) {
-                        resizeShape(selectedShape.id, width, newHeight)
+                    @change="
+                      (e) => {
+                        const newHeight = parseInt((e.target as HTMLInputElement).value)
+                        const width = getShapeDimensions(selectedShape).width
+                        if (newHeight > 0 && selectedShape) {
+                          resizeShape(selectedShape.id, width, newHeight)
+                        }
                       }
-                    }"
+                    "
                     min="3"
                     max="100"
                     class="size-input"
@@ -674,7 +736,6 @@ const alignShapes = (
 
           <!-- Rectangle Tool Settings -->
           <div v-if="activeToolType === 'rectangle'" class="tool-settings">
-
             <!-- Name field for selected shapes -->
             <div v-if="selectedShape" class="setting-item">
               <label>Name</label>
@@ -701,7 +762,12 @@ const alignShapes = (
                   class="section-checkbox"
                   :checked="rectangleSettings.showBorder"
                   @click.stop
-                  @change="(e) => { e.stopPropagation(); updateSetting('showBorder', (e.target as HTMLInputElement).checked) }"
+                  @change="
+                    (e) => {
+                      e.stopPropagation()
+                      updateSetting('showBorder', (e.target as HTMLInputElement).checked)
+                    }
+                  "
                 />
                 <span class="section-title">Border</span>
                 <span class="section-toggle">{{ collapsedSections.border ? '▶' : '▼' }}</span>
@@ -712,7 +778,9 @@ const alignShapes = (
                   <select
                     class="select-input"
                     :value="rectangleSettings.borderStyle"
-                    @change="(e) => updateSetting('borderStyle', (e.target as HTMLSelectElement).value)"
+                    @change="
+                      (e) => updateSetting('borderStyle', (e.target as HTMLSelectElement).value)
+                    "
                   >
                     <option value="single">Single Line</option>
                     <option value="double">Double Line</option>
@@ -728,13 +796,17 @@ const alignShapes = (
                     class="color-preview"
                     :style="{
                       backgroundColor: selectedShape
-                        ? (selectedShape.borderColor || selectedShape.color)
+                        ? selectedShape.borderColor || selectedShape.color
                         : toolStore.rectangleBorderColor,
                     }"
                     @click="() => openColorPickerFor('border')"
                     title="Click to change border color"
                   >
-                    {{ selectedShape ? (selectedShape.borderColor || selectedShape.color) : toolStore.rectangleBorderColor }}
+                    {{
+                      selectedShape
+                        ? selectedShape.borderColor || selectedShape.color
+                        : toolStore.rectangleBorderColor
+                    }}
                   </div>
                 </div>
                 <div v-if="!selectedShape" class="setting-item">
@@ -754,7 +826,12 @@ const alignShapes = (
                   class="section-checkbox"
                   :checked="rectangleSettings.showFill"
                   @click.stop
-                  @change="(e) => { e.stopPropagation(); updateSetting('showFill', (e.target as HTMLInputElement).checked) }"
+                  @change="
+                    (e) => {
+                      e.stopPropagation()
+                      updateSetting('showFill', (e.target as HTMLInputElement).checked)
+                    }
+                  "
                 />
                 <span class="section-title">Fill</span>
                 <span class="section-toggle">{{ collapsedSections.fill ? '▶' : '▼' }}</span>
@@ -809,7 +886,9 @@ const alignShapes = (
                       type="text"
                       class="fill-input"
                       :value="rectangleSettings.fillChar"
-                      @input="(e) => updateSetting('fillChar', (e.target as HTMLInputElement).value)"
+                      @input="
+                        (e) => updateSetting('fillChar', (e.target as HTMLInputElement).value)
+                      "
                       placeholder="Custom character (or leave empty)"
                       maxlength="1"
                     />
@@ -821,13 +900,17 @@ const alignShapes = (
                     class="color-preview"
                     :style="{
                       backgroundColor: selectedShape
-                        ? (selectedShape.fillColor || selectedShape.color)
+                        ? selectedShape.fillColor || selectedShape.color
                         : toolStore.rectangleFillColor,
                     }"
                     @click="() => openColorPickerFor('fill')"
                     title="Click to change fill color"
                   >
-                    {{ selectedShape ? (selectedShape.fillColor || selectedShape.color) : toolStore.rectangleFillColor }}
+                    {{
+                      selectedShape
+                        ? selectedShape.fillColor || selectedShape.color
+                        : toolStore.rectangleFillColor
+                    }}
                   </div>
                 </div>
               </div>
@@ -841,7 +924,14 @@ const alignShapes = (
                   class="section-checkbox"
                   :checked="rectangleSettings.showShadow"
                   @click.stop
-                  @change="(e) => { e.stopPropagation(); const checked = (e.target as HTMLInputElement).checked; updateSetting('showShadow', checked); updateSetting('shadow', checked) }"
+                  @change="
+                    (e) => {
+                      e.stopPropagation()
+                      const checked = (e.target as HTMLInputElement).checked
+                      updateSetting('showShadow', checked)
+                      updateSetting('shadow', checked)
+                    }
+                  "
                 />
                 <span class="section-title">Shadow</span>
                 <span class="section-toggle">{{ collapsedSections.shadow ? '▶' : '▼' }}</span>
@@ -853,7 +943,9 @@ const alignShapes = (
                       type="checkbox"
                       class="checkbox-input"
                       :checked="rectangleSettings.shadow"
-                      @change="(e) => updateSetting('shadow', (e.target as HTMLInputElement).checked)"
+                      @change="
+                        (e) => updateSetting('shadow', (e.target as HTMLInputElement).checked)
+                      "
                     />
                     <span class="checkbox-label">{{
                       selectedShape ? 'Has drop shadow' : 'Add drop shadow'
@@ -872,7 +964,12 @@ const alignShapes = (
                   class="section-checkbox"
                   :checked="rectangleSettings.showText"
                   @click.stop
-                  @change="(e) => { e.stopPropagation(); updateSetting('showText', (e.target as HTMLInputElement).checked) }"
+                  @change="
+                    (e) => {
+                      e.stopPropagation()
+                      updateSetting('showText', (e.target as HTMLInputElement).checked)
+                    }
+                  "
                 />
                 <span class="section-title">Text</span>
                 <span class="section-toggle">{{ collapsedSections.text ? '▶' : '▼' }}</span>
@@ -952,13 +1049,17 @@ const alignShapes = (
                     class="color-preview"
                     :style="{
                       backgroundColor: selectedShape
-                        ? (selectedShape.textColor || selectedShape.color)
-                        : toolStore.rectangleTextColor
+                        ? selectedShape.textColor || selectedShape.color
+                        : toolStore.rectangleTextColor,
                     }"
                     @click="() => openColorPickerFor('text')"
                     title="Click to change text color"
                   >
-                    {{ selectedShape ? (selectedShape.textColor || selectedShape.color) : toolStore.rectangleTextColor }}
+                    {{
+                      selectedShape
+                        ? selectedShape.textColor || selectedShape.color
+                        : toolStore.rectangleTextColor
+                    }}
                   </div>
                 </div>
               </div>
@@ -979,15 +1080,17 @@ const alignShapes = (
                       <input
                         type="number"
                         :value="selectedShape ? getShapeDimensions(selectedShape).width : 10"
-                        @change="(e) => {
-                          const newWidth = parseInt((e.target as HTMLInputElement).value)
-                          if (selectedShape) {
-                            const height = getShapeDimensions(selectedShape).height
-                            if (newWidth > 0) {
-                              resizeShape(selectedShape.id, newWidth, height)
+                        @change="
+                          (e) => {
+                            const newWidth = parseInt((e.target as HTMLInputElement).value)
+                            if (selectedShape) {
+                              const height = getShapeDimensions(selectedShape).height
+                              if (newWidth > 0) {
+                                resizeShape(selectedShape.id, newWidth, height)
+                              }
                             }
                           }
-                        }"
+                        "
                         min="3"
                         max="100"
                         class="size-input"
@@ -999,15 +1102,17 @@ const alignShapes = (
                       <input
                         type="number"
                         :value="selectedShape ? getShapeDimensions(selectedShape).height : 10"
-                        @change="(e) => {
-                          const newHeight = parseInt((e.target as HTMLInputElement).value)
-                          if (selectedShape) {
-                            const width = getShapeDimensions(selectedShape).width
-                            if (newHeight > 0) {
-                              resizeShape(selectedShape.id, width, newHeight)
+                        @change="
+                          (e) => {
+                            const newHeight = parseInt((e.target as HTMLInputElement).value)
+                            if (selectedShape) {
+                              const width = getShapeDimensions(selectedShape).width
+                              if (newHeight > 0) {
+                                resizeShape(selectedShape.id, width, newHeight)
+                              }
                             }
                           }
-                        }"
+                        "
                         min="3"
                         max="100"
                         class="size-input"
@@ -1047,7 +1152,12 @@ const alignShapes = (
                   class="section-checkbox"
                   :checked="diamondSettings.showBorder"
                   @click.stop
-                  @change="(e) => { e.stopPropagation(); updateSetting('showBorder', (e.target as HTMLInputElement).checked) }"
+                  @change="
+                    (e) => {
+                      e.stopPropagation()
+                      updateSetting('showBorder', (e.target as HTMLInputElement).checked)
+                    }
+                  "
                 />
                 <span class="section-title">Border</span>
                 <span class="section-toggle">{{ collapsedSections.border ? '▶' : '▼' }}</span>
@@ -1059,13 +1169,17 @@ const alignShapes = (
                     class="color-preview"
                     :style="{
                       backgroundColor: selectedShape
-                        ? (selectedShape.borderColor || selectedShape.color)
+                        ? selectedShape.borderColor || selectedShape.color
                         : colorStore.selectedColor.hex,
                     }"
                     @click="() => openColorPickerFor('border')"
                     title="Click to change border color"
                   >
-                    {{ selectedShape ? (selectedShape.borderColor || selectedShape.color) : colorStore.selectedColor.hex }}
+                    {{
+                      selectedShape
+                        ? selectedShape.borderColor || selectedShape.color
+                        : colorStore.selectedColor.hex
+                    }}
                   </div>
                 </div>
               </div>
@@ -1078,7 +1192,12 @@ const alignShapes = (
                   class="section-checkbox"
                   :checked="diamondSettings.showFill"
                   @click.stop
-                  @change="(e) => { e.stopPropagation(); updateSetting('showFill', (e.target as HTMLInputElement).checked) }"
+                  @change="
+                    (e) => {
+                      e.stopPropagation()
+                      updateSetting('showFill', (e.target as HTMLInputElement).checked)
+                    }
+                  "
                 />
                 <span class="section-title">Fill</span>
                 <span class="section-toggle">{{ collapsedSections.fill ? '▶' : '▼' }}</span>
@@ -1141,7 +1260,9 @@ const alignShapes = (
                       type="text"
                       class="fill-input"
                       :value="diamondSettings.fillChar"
-                      @input="(e) => updateSetting('fillChar', (e.target as HTMLInputElement).value)"
+                      @input="
+                        (e) => updateSetting('fillChar', (e.target as HTMLInputElement).value)
+                      "
                       placeholder="Custom character (or leave empty)"
                       maxlength="1"
                     />
@@ -1153,13 +1274,17 @@ const alignShapes = (
                     class="color-preview"
                     :style="{
                       backgroundColor: selectedShape
-                        ? (selectedShape.fillColor || selectedShape.color)
+                        ? selectedShape.fillColor || selectedShape.color
                         : colorStore.selectedColor.hex,
                     }"
                     @click="() => openColorPickerFor('fill')"
                     title="Click to change fill color"
                   >
-                    {{ selectedShape ? (selectedShape.fillColor || selectedShape.color) : colorStore.selectedColor.hex }}
+                    {{
+                      selectedShape
+                        ? selectedShape.fillColor || selectedShape.color
+                        : colorStore.selectedColor.hex
+                    }}
                   </div>
                 </div>
               </div>
@@ -1172,7 +1297,12 @@ const alignShapes = (
                   class="section-checkbox"
                   :checked="diamondSettings.showText"
                   @click.stop
-                  @change="(e) => { e.stopPropagation(); updateSetting('showText', (e.target as HTMLInputElement).checked) }"
+                  @change="
+                    (e) => {
+                      e.stopPropagation()
+                      updateSetting('showText', (e.target as HTMLInputElement).checked)
+                    }
+                  "
                 />
                 <span class="section-title">Text</span>
                 <span class="section-toggle">{{ collapsedSections.text ? '▶' : '▼' }}</span>
@@ -1252,45 +1382,19 @@ const alignShapes = (
                     class="color-preview"
                     :style="{
                       backgroundColor: selectedShape
-                        ? (selectedShape.textColor || selectedShape.color)
-                        : toolStore.diamondTextColor
+                        ? selectedShape.textColor || selectedShape.color
+                        : toolStore.diamondTextColor,
                     }"
                     @click="() => openColorPickerFor('text')"
                     title="Click to change text color"
                   >
-                    {{ selectedShape ? (selectedShape.textColor || selectedShape.color) : toolStore.diamondTextColor }}
+                    {{
+                      selectedShape
+                        ? selectedShape.textColor || selectedShape.color
+                        : toolStore.diamondTextColor
+                    }}
                   </div>
                 </div>
-              </div>
-            </div>
-            <!-- Shadow Section -->
-            <div class="section-group">
-              <div class="section-header" @click="toggleSection('shadow')">
-                <input
-                  type="checkbox"
-                  class="section-checkbox"
-                  :checked="diamondSettings.showShadow"
-                  @click.stop
-                  @change="(e) => { e.stopPropagation(); const checked = (e.target as HTMLInputElement).checked; updateSetting('showShadow', checked); updateSetting('shadow', checked) }"
-                />
-                <span class="section-title">Shadow</span>
-                <span class="section-toggle">{{ collapsedSections.shadow ? '▶' : '▼' }}</span>
-              </div>
-              <div v-show="!collapsedSections.shadow" class="section-content">
-                <div class="setting-item">
-                  <div class="checkbox-wrapper">
-                    <input
-                      type="checkbox"
-                      class="checkbox-input"
-                      :checked="diamondSettings.shadow"
-                      @change="(e) => updateSetting('shadow', (e.target as HTMLInputElement).checked)"
-                    />
-                    <span class="checkbox-label">{{
-                      selectedShape ? 'Has drop shadow' : 'Add drop shadow'
-                    }}</span>
-                  </div>
-                </div>
-                <!-- Future: shadow color, character, x/y offset -->
               </div>
             </div>
 
@@ -1309,15 +1413,17 @@ const alignShapes = (
                       <input
                         type="number"
                         :value="selectedShape ? getShapeDimensions(selectedShape).width : 10"
-                        @change="(e) => {
-                          const newWidth = parseInt((e.target as HTMLInputElement).value)
-                          if (selectedShape) {
-                            const height = getShapeDimensions(selectedShape).height
-                            if (newWidth > 0) {
-                              resizeShape(selectedShape.id, newWidth, height)
+                        @change="
+                          (e) => {
+                            const newWidth = parseInt((e.target as HTMLInputElement).value)
+                            if (selectedShape) {
+                              const height = getShapeDimensions(selectedShape).height
+                              if (newWidth > 0) {
+                                resizeShape(selectedShape.id, newWidth, height)
+                              }
                             }
                           }
-                        }"
+                        "
                         min="3"
                         max="100"
                         class="size-input"
@@ -1329,15 +1435,17 @@ const alignShapes = (
                       <input
                         type="number"
                         :value="selectedShape ? getShapeDimensions(selectedShape).height : 10"
-                        @change="(e) => {
-                          const newHeight = parseInt((e.target as HTMLInputElement).value)
-                          if (selectedShape) {
-                            const width = getShapeDimensions(selectedShape).width
-                            if (newHeight > 0) {
-                              resizeShape(selectedShape.id, width, newHeight)
+                        @change="
+                          (e) => {
+                            const newHeight = parseInt((e.target as HTMLInputElement).value)
+                            if (selectedShape) {
+                              const width = getShapeDimensions(selectedShape).width
+                              if (newHeight > 0) {
+                                resizeShape(selectedShape.id, width, newHeight)
+                              }
                             }
                           }
-                        }"
+                        "
                         min="3"
                         max="100"
                         class="size-input"
@@ -1352,7 +1460,6 @@ const alignShapes = (
 
           <!-- Line Tool Settings -->
           <div v-if="activeToolType === 'line'" class="tool-settings">
-
             <!-- Name field for selected shapes -->
             <div v-if="selectedShape" class="setting-item">
               <label>Name</label>
@@ -1431,7 +1538,9 @@ const alignShapes = (
                               lineStartStyle: (e.target as HTMLSelectElement).value,
                             })
                           : toolStore.setLineStartStyle &&
-                            toolStore.setLineStartStyle((e.target as HTMLSelectElement).value as any)
+                            toolStore.setLineStartStyle(
+                              (e.target as HTMLSelectElement).value as any,
+                            )
                     "
                   >
                     <option value="none">None</option>
@@ -1508,13 +1617,15 @@ const alignShapes = (
                       <input
                         type="number"
                         :value="getShapeDimensions(selectedShape).width"
-                        @change="(e) => {
-                          const newWidth = parseInt((e.target as HTMLInputElement).value)
-                          const height = getShapeDimensions(selectedShape).height
-                          if (newWidth > 0 && selectedShape) {
-                            resizeShape(selectedShape.id, newWidth, height)
+                        @change="
+                          (e) => {
+                            const newWidth = parseInt((e.target as HTMLInputElement).value)
+                            const height = getShapeDimensions(selectedShape).height
+                            if (newWidth > 0 && selectedShape) {
+                              resizeShape(selectedShape.id, newWidth, height)
+                            }
                           }
-                        }"
+                        "
                         min="3"
                         max="100"
                         class="size-input"
@@ -1525,13 +1636,15 @@ const alignShapes = (
                       <input
                         type="number"
                         :value="getShapeDimensions(selectedShape).height"
-                        @change="(e) => {
-                          const newHeight = parseInt((e.target as HTMLInputElement).value)
-                          const width = getShapeDimensions(selectedShape).width
-                          if (newHeight > 0 && selectedShape) {
-                            resizeShape(selectedShape.id, width, newHeight)
+                        @change="
+                          (e) => {
+                            const newHeight = parseInt((e.target as HTMLInputElement).value)
+                            const width = getShapeDimensions(selectedShape).width
+                            if (newHeight > 0 && selectedShape) {
+                              resizeShape(selectedShape.id, width, newHeight)
+                            }
                           }
-                        }"
+                        "
                         min="3"
                         max="100"
                         class="size-input"
@@ -1545,7 +1658,6 @@ const alignShapes = (
 
           <!-- Text Tool Settings -->
           <div v-if="activeToolType === 'text'" class="tool-settings">
-
             <!-- Name field for selected shapes -->
             <div v-if="selectedShape" class="setting-item">
               <label>Name</label>
@@ -1715,13 +1827,15 @@ const alignShapes = (
                   <input
                     type="number"
                     :value="getShapeDimensions(selectedShape).width"
-                    @change="(e) => {
-                      const newWidth = parseInt((e.target as HTMLInputElement).value)
-                      const height = getShapeDimensions(selectedShape).height
-                      if (newWidth > 0 && selectedShape) {
-                        resizeShape(selectedShape.id, newWidth, height)
+                    @change="
+                      (e) => {
+                        const newWidth = parseInt((e.target as HTMLInputElement).value)
+                        const height = getShapeDimensions(selectedShape).height
+                        if (newWidth > 0 && selectedShape) {
+                          resizeShape(selectedShape.id, newWidth, height)
+                        }
                       }
-                    }"
+                    "
                     min="3"
                     max="100"
                     class="size-input"
@@ -1732,13 +1846,15 @@ const alignShapes = (
                   <input
                     type="number"
                     :value="getShapeDimensions(selectedShape).height"
-                    @change="(e) => {
-                      const newHeight = parseInt((e.target as HTMLInputElement).value)
-                      const width = getShapeDimensions(selectedShape).width
-                      if (newHeight > 0 && selectedShape) {
-                        resizeShape(selectedShape.id, width, newHeight)
+                    @change="
+                      (e) => {
+                        const newHeight = parseInt((e.target as HTMLInputElement).value)
+                        const width = getShapeDimensions(selectedShape).width
+                        if (newHeight > 0 && selectedShape) {
+                          resizeShape(selectedShape.id, width, newHeight)
+                        }
                       }
-                    }"
+                    "
                     min="3"
                     max="100"
                     class="size-input"
@@ -2016,7 +2132,7 @@ const alignShapes = (
   margin: 0;
 }
 
-.size-input[type="number"] {
+.size-input[type='number'] {
   -moz-appearance: textfield;
 }
 

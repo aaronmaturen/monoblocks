@@ -1,7 +1,20 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
-export type Tool = 'pan' | 'brush' | 'text' | 'select' | 'eraser' | 'eyedropper' | 'undo' | 'redo' | 'recenter' | 'rectangle' | 'diamond' | 'line' | 'reset'
+export type Tool =
+  | 'pan'
+  | 'pencil'
+  | 'text'
+  | 'select'
+  | 'eraser'
+  | 'eyedropper'
+  | 'undo'
+  | 'redo'
+  | 'recenter'
+  | 'rectangle'
+  | 'diamond'
+  | 'line'
+  | 'reset'
 
 export type TextHorizontalAlign = 'left' | 'center' | 'right'
 export type TextVerticalAlign = 'top' | 'middle' | 'bottom'
@@ -19,8 +32,8 @@ export const ASCII_CHARACTERS = {
       { char: '▄', name: 'Lower Half Block', code: 'U+2584' },
       { char: '░', name: 'Light Shade', code: 'U+2591' },
       { char: '▒', name: 'Medium Shade', code: 'U+2592' },
-      { char: '▓', name: 'Dark Shade', code: 'U+2593' }
-    ]
+      { char: '▓', name: 'Dark Shade', code: 'U+2593' },
+    ],
   },
   lines: {
     name: 'Box Drawing',
@@ -35,8 +48,8 @@ export const ASCII_CHARACTERS = {
       { char: '┤', name: 'Vertical Left', code: 'U+2524' },
       { char: '┬', name: 'Horizontal Down', code: 'U+252C' },
       { char: '┴', name: 'Horizontal Up', code: 'U+2534' },
-      { char: '┼', name: 'Cross', code: 'U+253C' }
-    ]
+      { char: '┼', name: 'Cross', code: 'U+253C' },
+    ],
   },
   doubleLines: {
     name: 'Double Lines',
@@ -51,8 +64,8 @@ export const ASCII_CHARACTERS = {
       { char: '╣', name: 'Double Vertical Left', code: 'U+2563' },
       { char: '╦', name: 'Double Horizontal Down', code: 'U+2566' },
       { char: '╩', name: 'Double Horizontal Up', code: 'U+2569' },
-      { char: '╬', name: 'Double Cross', code: 'U+256C' }
-    ]
+      { char: '╬', name: 'Double Cross', code: 'U+256C' },
+    ],
   },
   symbols: {
     name: 'Symbols',
@@ -66,8 +79,8 @@ export const ASCII_CHARACTERS = {
       { char: '◆', name: 'Diamond', code: 'U+25C6' },
       { char: '◇', name: 'White Diamond', code: 'U+25C7' },
       { char: '★', name: 'Star', code: 'U+2605' },
-      { char: '☆', name: 'White Star', code: 'U+2606' }
-    ]
+      { char: '☆', name: 'White Star', code: 'U+2606' },
+    ],
   },
   arrows: {
     name: 'Arrows',
@@ -81,8 +94,8 @@ export const ASCII_CHARACTERS = {
       { char: '↘', name: 'SE Arrow', code: 'U+2198' },
       { char: '↙', name: 'SW Arrow', code: 'U+2199' },
       { char: '↔', name: 'Left Right', code: 'U+2194' },
-      { char: '↕', name: 'Up Down', code: 'U+2195' }
-    ]
+      { char: '↕', name: 'Up Down', code: 'U+2195' },
+    ],
   },
   classic: {
     name: 'Classic ASCII',
@@ -98,9 +111,9 @@ export const ASCII_CHARACTERS = {
       { char: '_', name: 'Underscore', code: 'U+005F' },
       { char: '.', name: 'Period', code: 'U+002E' },
       { char: '@', name: 'At', code: 'U+0040' },
-      { char: '~', name: 'Tilde', code: 'U+007E' }
-    ]
-  }
+      { char: '~', name: 'Tilde', code: 'U+007E' },
+    ],
+  },
 }
 
 export type RectangleBorderStyle = 'single' | 'double' | 'thick' | 'rounded' | 'dashed' | 'solid'
@@ -114,16 +127,22 @@ export const LINE_STYLES = {
   thick: { horizontal: '━', vertical: '┃', diagonal1: '╱', diagonal2: '╲' },
   dashed: { horizontal: '╌', vertical: '╎', diagonal1: '╱', diagonal2: '╲' },
   dotted: { horizontal: '⋯', vertical: '⋮', diagonal1: '⋯', diagonal2: '⋯' },
-  arrow: { horizontal: '─', vertical: '│', diagonal1: '╱', diagonal2: '╲' }
+  arrow: { horizontal: '─', vertical: '│', diagonal1: '╱', diagonal2: '╲' },
 }
 
 export const LINE_END_STYLES = {
   arrow: {
-    right: '→', left: '←', up: '↑', down: '↓',
-    upRight: '↗', upLeft: '↖', downRight: '↘', downLeft: '↙'
+    right: '→',
+    left: '←',
+    up: '↑',
+    down: '↓',
+    upRight: '↗',
+    upLeft: '↖',
+    downRight: '↘',
+    downLeft: '↙',
   },
   circle: { all: '●' },
-  square: { all: '■' }
+  square: { all: '■' },
 }
 
 export const RECTANGLE_BORDER_STYLES = {
@@ -134,7 +153,7 @@ export const RECTANGLE_BORDER_STYLES = {
     topLeft: '┌',
     topRight: '┐',
     bottomLeft: '└',
-    bottomRight: '┘'
+    bottomRight: '┘',
   },
   double: {
     name: 'Double Line',
@@ -143,7 +162,7 @@ export const RECTANGLE_BORDER_STYLES = {
     topLeft: '╔',
     topRight: '╗',
     bottomLeft: '╚',
-    bottomRight: '╝'
+    bottomRight: '╝',
   },
   thick: {
     name: 'Thick Line',
@@ -152,7 +171,7 @@ export const RECTANGLE_BORDER_STYLES = {
     topLeft: '┏',
     topRight: '┓',
     bottomLeft: '┗',
-    bottomRight: '┛'
+    bottomRight: '┛',
   },
   rounded: {
     name: 'Rounded',
@@ -161,7 +180,7 @@ export const RECTANGLE_BORDER_STYLES = {
     topLeft: '╭',
     topRight: '╮',
     bottomLeft: '╰',
-    bottomRight: '╯'
+    bottomRight: '╯',
   },
   dashed: {
     name: 'Dashed',
@@ -170,7 +189,7 @@ export const RECTANGLE_BORDER_STYLES = {
     topLeft: '┌',
     topRight: '┐',
     bottomLeft: '└',
-    bottomRight: '┘'
+    bottomRight: '┘',
   },
   solid: {
     name: 'Solid Block',
@@ -179,8 +198,8 @@ export const RECTANGLE_BORDER_STYLES = {
     topLeft: '█',
     topRight: '█',
     bottomLeft: '█',
-    bottomRight: '█'
-  }
+    bottomRight: '█',
+  },
 }
 
 export const useToolStore = defineStore('tools', () => {
@@ -197,13 +216,13 @@ export const useToolStore = defineStore('tools', () => {
   const rectangleTextColor = ref<string>('#000000') // Text color in rectangle
   const rectangleBorderColor = ref<string>('#000000') // Border color for rectangle
   const rectangleFillColor = ref<string>('#000000') // Fill color for rectangle
-  
+
   // Rectangle checkbox states for enabling/disabling features
-  const rectangleShowText = ref(false)  // Default to false - text is optional
+  const rectangleShowText = ref(false) // Default to false - text is optional
   const rectangleShowFill = ref(true)
   const rectangleShowBorder = ref(true)
   const rectangleShowShadow = ref(false)
-  
+
   // Diamond tool settings
   const diamondBorderStyle = ref<RectangleBorderStyle>('single')
   const diamondFillChar = ref<string>('') // Empty string means no fill
@@ -218,12 +237,12 @@ export const useToolStore = defineStore('tools', () => {
   const diamondShowFill = ref(true)
   const diamondShowBorder = ref(true)
   const diamondShowShadow = ref(false)
-  
+
   const lineStyle = ref<LineStyle>('single')
   const lineStartStyle = ref<LineEndStyle>('none')
   const lineEndStyle = ref<LineEndStyle>('arrow')
   const editingShapeId = ref<string | null>(null)
-  
+
   // Text tool properties
   const textContent = ref<string>('') // Text content to be placed
   const textHorizontalAlign = ref<TextHorizontalAlign>('left')
@@ -271,39 +290,39 @@ export const useToolStore = defineStore('tools', () => {
   const setRectangleText = (text: string) => {
     rectangleText.value = text
   }
-  
+
   const setRectangleTextAlign = (align: string) => {
     rectangleTextAlign.value = align
   }
-  
+
   const setRectangleTextPosition = (position: string) => {
     rectangleTextPosition.value = position
   }
-  
+
   const setRectangleTextColor = (color: string) => {
     rectangleTextColor.value = color
   }
-  
+
   const setRectangleBorderColor = (color: string) => {
     rectangleBorderColor.value = color
   }
-  
+
   const setRectangleFillColor = (color: string) => {
     rectangleFillColor.value = color
   }
-  
+
   const setRectangleShowText = (show: boolean) => {
     rectangleShowText.value = show
   }
-  
+
   const setRectangleShowFill = (show: boolean) => {
     rectangleShowFill.value = show
   }
-  
+
   const setRectangleShowBorder = (show: boolean) => {
     rectangleShowBorder.value = show
   }
-  
+
   const setRectangleShowShadow = (show: boolean) => {
     rectangleShowShadow.value = show
   }
@@ -393,9 +412,9 @@ export const useToolStore = defineStore('tools', () => {
     textShowBorder.value = show
   }
 
-  return { 
-    currentTool, 
-    previousTool, 
+  return {
+    currentTool,
+    previousTool,
     selectedCharacter,
     showCharacterPalette,
     rectangleBorderStyle,
@@ -432,8 +451,8 @@ export const useToolStore = defineStore('tools', () => {
     textHorizontalAlign,
     textVerticalAlign,
     textShowBorder,
-    setTool, 
-    setPreviousTool, 
+    setTool,
+    setPreviousTool,
     returnToPreviousTool,
     setSelectedCharacter,
     toggleCharacterPalette,
@@ -471,6 +490,6 @@ export const useToolStore = defineStore('tools', () => {
     setTextContent,
     setTextHorizontalAlign,
     setTextVerticalAlign,
-    setTextShowBorder
+    setTextShowBorder,
   }
 })

@@ -10,7 +10,7 @@ const appStore = useAppStore()
 const tools: Array<{ id: Tool; label: string }> = [
   { id: 'pan', label: 'Pan' },
   { id: 'select', label: 'Select' },
-  { id: 'brush', label: 'Brush' },
+  { id: 'pencil', label: 'Pencil' },
   { id: 'rectangle', label: 'Rectangle' },
   { id: 'diamond', label: 'Diamond' },
   { id: 'line', label: 'Line' },
@@ -110,8 +110,8 @@ const selectTool = (toolId: Tool) => {
         <!-- Pan Icon -->
         <i v-if="tool.id === 'pan'" class="fa-thumbprint fa-light fa-hand"></i>
 
-        <!-- Brush Icon -->
-        <i v-if="tool.id === 'brush'" class="fa-thumbprint fa-light fa-pencil"></i>
+        <!-- Pencil Icon -->
+        <i v-if="tool.id === 'pencil'" class="fa-thumbprint fa-light fa-pencil"></i>
 
         <!-- Rectangle Icon -->
         <i v-if="tool.id === 'rectangle'" class="fa-thumbprint fa-light fa-rectangle"></i>
@@ -238,7 +238,7 @@ const selectTool = (toolId: Tool) => {
 
 /* Drawing Tools - Vibrant Colors */
 .tool-button:has(.fa-pencil) i {
-  color: var(--icon-brush);
+  color: var(--icon-pencil);
 }
 .tool-button:has(.fa-rectangle) i {
   color: var(--icon-rectangle);

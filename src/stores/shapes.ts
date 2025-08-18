@@ -19,6 +19,7 @@ export interface Shape extends ShapeData {
   selected: boolean
   timestamp: number
   toolSettings?: Record<string, any>
+  toolColors?: Record<string, any>
   groupId?: string // Optional grouping
 }
 
@@ -43,6 +44,7 @@ export type ShapeEvent =
   | { type: 'group:removed'; groupId: string }
   | { type: 'group:updated'; group: ShapeGroup }
   | { type: 'render:required' }
+  | { type: 'selection:changed'; selectedIds: string[] }
 
 export type ShapeEventListener = (event: ShapeEvent) => void
 
@@ -58,6 +60,15 @@ export const useShapesStore = defineStore('shapes', () => {
   // ID generators
   let nextShapeId = 1
   let nextGroupId = 1
+  
+  // Shape type counters for naming
+  const shapeTypeCounters = reactive<Record<string, number>>({
+    rectangle: 1,
+    diamond: 1,
+    line: 1,
+    text: 1,
+    pencil: 1,
+  })
   
   // Event system
   const addEventListener = (listener: ShapeEventListener) => {
@@ -96,6 +107,7 @@ export const useShapesStore = defineStore('shapes', () => {
         groups: groups.value,
         nextShapeId,
         nextGroupId,
+        shapeTypeCounters: { ...shapeTypeCounters }, // Save shape type counters
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch (error) {
@@ -119,6 +131,11 @@ export const useShapesStore = defineStore('shapes', () => {
         nextShapeId = state.nextShapeId || 1
         nextGroupId = state.nextGroupId || 1
         
+        // Restore shape type counters
+        if (state.shapeTypeCounters) {
+          Object.assign(shapeTypeCounters, state.shapeTypeCounters)
+        }
+        
         return true
       }
     } catch (error) {
@@ -136,6 +153,12 @@ export const useShapesStore = defineStore('shapes', () => {
     toolSettings?: Record<string, any>,
     colors?: { borderColor?: string; fillColor?: string; textColor?: string }
   ): Shape => {
+    // Get and increment the counter for this shape type
+    if (!shapeTypeCounters[type]) {
+      shapeTypeCounters[type] = 1
+    }
+    const typeCounter = shapeTypeCounters[type]++
+    
     const shape: Shape = {
       id: `shape-${nextShapeId++}`,
       type,
@@ -144,7 +167,7 @@ export const useShapesStore = defineStore('shapes', () => {
       borderColor: colors?.borderColor || color,
       fillColor: colors?.fillColor || color,
       textColor: colors?.textColor || color,
-      name: name || `${type.charAt(0).toUpperCase() + type.slice(1)} ${nextShapeId - 1}`,
+      name: name || `${type.charAt(0).toUpperCase() + type.slice(1)} ${typeCounter}`,
       zOrder: getNextZOrder(),
       visible: true,
       locked: false,
@@ -579,11 +602,96 @@ export const useShapesStore = defineStore('shapes', () => {
     return removeShape(shapeId)
   }
 
+  // Duplicate a shape
+  const duplicateShape = (shapeId: string) => {
+    const shape = shapes.value.find(s => s.id === shapeId)
+    if (!shape) return null
+    
+    // Create a new shape with the same data but offset by 2 grid cells
+    const newData = new Map<string, string>()
+    for (const [key, value] of shape.data) {
+      const [x, y] = key.split(',').map(Number)
+      newData.set(`${x + 2},${y + 2}`, value)
+    }
+    
+    // Don't pass a name - let addShape generate a new one with the proper counter
+    const newShape = addShape(
+      shape.type,
+      newData,
+      shape.color,
+      undefined, // Let addShape generate the name
+      { ...shape.toolSettings },
+      {
+        borderColor: shape.borderColor,
+        fillColor: shape.fillColor,
+        textColor: shape.textColor
+      }
+    )
+    
+    return newShape
+  }
+
+  // Bring shape to front (highest z-order)
+  const bringToFront = (shapeId: string) => {
+    const shape = shapes.value.find(s => s.id === shapeId)
+    if (!shape) return false
+    
+    const maxZOrder = Math.max(...shapes.value.map(s => s.zOrder))
+    shape.zOrder = maxZOrder + 1
+    
+    saveToStorage()
+    emit({ type: 'shape:updated', shape, changes: { zOrder: shape.zOrder } })
+    emit({ type: 'render:required' })
+    
+    return true
+  }
+
+  // Send shape to back (lowest z-order)
+  const sendToBack = (shapeId: string) => {
+    const shape = shapes.value.find(s => s.id === shapeId)
+    if (!shape) return false
+    
+    const minZOrder = Math.min(...shapes.value.map(s => s.zOrder))
+    shape.zOrder = minZOrder - 1
+    
+    // Normalize z-orders to prevent negative values
+    const sortedShapes = shapes.value.sort((a, b) => a.zOrder - b.zOrder)
+    sortedShapes.forEach((s, index) => {
+      s.zOrder = index + 1
+    })
+    
+    saveToStorage()
+    emit({ type: 'shape:updated', shape, changes: { zOrder: shape.zOrder } })
+    emit({ type: 'render:required' })
+    
+    return true
+  }
+
+  // Select all shapes
+  const selectAll = () => {
+    selectedShapeIds.value.clear()
+    shapes.value.forEach(shape => {
+      selectedShapeIds.value.add(shape.id)
+    })
+    
+    emit({ type: 'selection:changed', selectedIds: Array.from(selectedShapeIds.value) })
+    emit({ type: 'render:required' })
+  }
+
   const clearAllShapes = () => {
     console.log('[ShapesStore] clearAllShapes called, current shapes:', shapes.value.length)
     shapes.value = []
     groups.value = []
     selectedShapeIds.value.clear()
+    
+    // Reset ID counters so shapes start from 1 again
+    nextShapeId = 1
+    nextGroupId = 1
+    
+    // Reset shape type counters
+    Object.keys(shapeTypeCounters).forEach(key => {
+      shapeTypeCounters[key] = 1
+    })
     
     saveToStorage()
     
@@ -613,6 +721,7 @@ export const useShapesStore = defineStore('shapes', () => {
     addShape,
     removeShape,
     deleteShape,
+    duplicateShape,
     updateShape,
     updateShapeColor,
     updateShapeBorderColor,
@@ -623,6 +732,9 @@ export const useShapesStore = defineStore('shapes', () => {
     getShape,
     getAllShapes,
     getVisibleShapes,
+    bringToFront,
+    sendToBack,
+    selectAll,
     
     // Z-order management
     moveToFront,

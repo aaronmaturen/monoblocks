@@ -30,7 +30,7 @@ export function useSelection() {
     for (const [key, char] of shape.data) {
       // Include empty strings (invisible placeholders) but exclude shadow characters
       // Empty strings maintain bounds but don't render
-      if ((char !== null && char !== undefined && char !== '▓') || char === '') {
+      if (char !== null && char !== undefined && char !== '▓') {
         const [x, y] = key.split(',').map(Number)
         minX = Math.min(minX, x)
         maxX = Math.max(maxX, x)
